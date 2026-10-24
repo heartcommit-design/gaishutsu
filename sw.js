@@ -1,5 +1,5 @@
 // 外出・外泊管理：オフライン起動用（画面のファイルだけを保存。患者データは扱わない）
-const CACHE = 'gaishutsu-v1.2.0';
+const CACHE = 'gaishutsu-v1.4.0';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); });
 self.addEventListener('activate', e => {

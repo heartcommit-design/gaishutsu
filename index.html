@@ -193,6 +193,34 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
 #wakeBadge.on{background:#1e7d4f}#wakeBadge.off{background:#c62828}
 #printArea{display:none}
 @page{size:A4 landscape;margin:8mm}
+
+/* ---------- スマホ（幅600px以下） ---------- */
+@media (max-width:600px){
+ header{gap:6px 8px;padding:6px 12px}
+ header h1{font-size:16px;min-width:0;flex:1 1 auto}
+ #clock{font-size:20px;order:1}
+ #wakeBadge,#soundBtn{order:2;font-size:12px;padding:3px 8px;border-width:1px}
+ #banner{font-size:15px;padding:8px 12px;gap:8px}
+ #banner .msg{min-width:0;flex:1 1 100%}
+ #banner button{font-size:14px;padding:6px 10px}
+ .notice{font-size:13px;padding:6px 12px;gap:6px}
+ .notice .msg{min-width:0;flex:1 1 100%}
+ nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px 8px 0;gap:3px;scrollbar-width:none}
+ nav::-webkit-scrollbar{display:none}
+ nav button{font-size:15px;padding:8px 12px;white-space:nowrap;flex:0 0 auto}
+ main{padding-left:10px;padding-right:10px}
+ .card{padding:10px;border-left-width:8px}
+ .head{gap:8px}
+ .tagbadge{font-size:20px;min-width:70px;padding:4px 8px}
+ .tagbadge.none{font-size:13px;padding:6px 6px}
+ .count{font-size:20px}
+ .body{gap:10px}
+ .thumb,.nophoto{width:84px;height:112px;font-size:12px}
+ .body .info{flex:1 1 180px;min-width:0}
+ .actions .btn{font-size:14px}
+ #toast{bottom:16px;font-size:14px}
+ dialog{max-width:calc(100vw - 16px)}
+}
 @media print{
  body.pm-history>*:not(#printArea){display:none!important}
  body.pm-history #printArea{display:block!important}
@@ -524,6 +552,8 @@ function toLocalInput(ts){const d=new Date(ts);return `${d.getFullYear()}-${pad(
 function toDateInput(ts){const d=new Date(ts);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
 
 /* ---------- 時刻：15分刻みで選ぶ（細かくしたい時だけ数値入力） ---------- */
+const IS_PHONE=Math.min(screen.width,screen.height)<600;
+if(IS_PHONE)document.addEventListener('DOMContentLoaded',()=>{const nav=document.querySelector('nav');['gapBar','prBar','bkBar'].forEach(id=>{const e=document.getElementById(id);if(e&&nav)nav.before(e);});});
 const TP_DESC=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
 
 function round15(ts){return Math.round(ts/900000)*900000;}
@@ -669,7 +699,7 @@ document.addEventListener('pointerdown',()=>{if(!wakeLock)keepAwake();});
 document.addEventListener('pointerdown',ensureAudio);document.addEventListener('keydown',ensureAudio);
 
 /* ---------- 画面切替 ---------- */
-function showTab(name){$$('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));$$('main section').forEach(s=>s.classList.toggle('active',s.id==='sec-'+name));
+function showTab(name){$$('nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));{const ab=document.querySelector(`nav button[data-tab="${name}"]`);if(ab&&IS_PHONE)ab.scrollIntoView({block:'nearest',inline:'center'});}$$('main section').forEach(s=>s.classList.toggle('active',s.id==='sec-'+name));
   if(name==='new')prepareNewForm();if(name==='history')renderHistory();if(name==='tags')renderTags();if(name==='patients')renderPatients();if(name==='plan')renderPlans();if(name==='calendar')renderCalendar();if(name==='stats')renderStats();if(name==='settings')renderSettings();window.scrollTo(0,0);}
 $$('nav button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
 
@@ -709,6 +739,7 @@ async function renderActive(){
     if(s!=='search')acts.push(`<button class="btn srch" data-act="lost">はぐれ・行方不明の連絡あり</button>`);
     else acts.push(`<button class="btn" data-act="found">所在確認できた（捜索終了）</button>`);
     if(mk)acts.push(`<button class="btn" data-act="reveal">表示（30秒）</button>`);
+    if(o.status==='out'&&o.departAtPlanned&&now-o.departAt<30*60000)acts.push(`<button class="btn" data-act="undo">GOの取消（予定に戻す）</button>`);
     acts.push(`<button class="btn" data-act="log">対応記録</button>`,`<button class="btn" data-act="extend">帰院予定を変更</button>`,`<button class="btn" data-act="edit">内容を修正</button>`);
     return `<article class="card st-${s}" data-id="${o.id}">
       <div class="head">${tg}<div class="who"><div class="name">${esc(shownName(o))}</div><div class="sub">${esc([wardText(o),o.adm,o.kind,(o.pid&&!mk)?'ID '+o.pid:''].filter(Boolean).join('・'))}</div></div>
@@ -723,7 +754,7 @@ async function renderActive(){
 }
 $('#activeList').addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const id=b.closest('.card').dataset.id;const o=outings.find(x=>x.id===id);if(!o)return;
-  ({return:dlgReturn,ack:doAck,lost:dlgLost,found:o=>dlgExtend(o,true),log:dlgLog,extend:o=>dlgExtend(o,false),edit:dlgEdit,photo:dlgPhoto,reveal:o=>{revealUntil[o.id]=Date.now()+30000;lastSig='';tick();}})[b.dataset.act](o);
+  ({undo:dlgUndo,return:dlgReturn,ack:doAck,lost:dlgLost,found:o=>dlgExtend(o,true),log:dlgLog,extend:o=>dlgExtend(o,false),edit:dlgEdit,photo:dlgPhoto,reveal:o=>{revealUntil[o.id]=Date.now()+30000;lastSig='';tick();}})[b.dataset.act](o);
 });
 $('#printBtn').addEventListener('click',async()=>{showTab('active');$('#printHead').textContent='外出・外泊中一覧　印刷：'+fmtFull(Date.now());const now=Date.now();const h=(settings.printHours||[]).filter(x=>new Date(now).getHours()>=x).slice(-1)[0];if(h!==undefined){settings.prDoneKey=toDateInput(now)+':'+h;await saveSettings();$('#prBar').hidden=true;}try{window.print();}catch(e){toast('この画面からは印刷できません。SafariやChromeで直接開いてください。',6000);}});
 
@@ -741,12 +772,13 @@ async function renderPlans(){
      <dl class="info"><dt>出発予定</dt><dd>${fmt(o.departAt)}</dd><dt>帰院予定</dt><dd><b>${fmt(o.dueAt)}</b>（出発が前後しても変わりません）</dd><dt>区分</dt><dd>${esc(o.kind)}</dd>
      <dt>行き先</dt><dd>${esc(o.dest)||'—'}</dd><dt>同行</dt><dd>${o.alone?'単独':(mk?'同行あり':esc(o.compName)+(o.compRel?'（'+esc(o.compRel)+'）':''))}</dd>
      <dt>準備</dt><dd>${ready.join('・')}</dd><dt>登録</dt><dd>${esc(o.departNurse)}</dd></dl></div>
-     <div class="actions"><button class="btn ok big" data-pact="go" style="font-size:20px;padding:12px 30px">出発（GO）</button><button class="btn" data-pact="edit">内容を確認・変更して出発</button><button class="btn" data-pact="cancel">予定を取り消す</button></div></article>`;}).join('')
+     <div class="actions"><button class="btn ok big" data-pact="go" style="font-size:20px;padding:12px 30px">出発（GO）</button><button class="btn" data-pact="edit">内容を確認・変更して出発</button><button class="btn" data-pact="planedit">予定を修正（出発しない）</button><button class="btn" data-pact="cancel">予定を取り消す</button></div></article>`;}).join('')
    ||'<div class="empty">出発前の予定はありません。</div>';
 }
 $('#planList').addEventListener('click',async e=>{const b=e.target.closest('[data-pact]');if(!b)return;const o=outings.find(x=>x.id===b.closest('.card').dataset.id);if(!o)return;
   if(b.dataset.pact==='go')dlgGo(o);
   if(b.dataset.pact==='edit')startDeparture(o);
+  if(b.dataset.pact==='planedit')startDeparture(o,'edit');
   if(b.dataset.pact==='photo')dlgPhoto(o);
   if(b.dataset.pact==='cancel'){if(!await askConfirm(`${o.name} さんの${o.kind}予定（${fmt(o.departAt)}）を取り消しますか？`+(o.tagId?`予約していたタグ ${o.tagId} は空きに戻ります。`:''),'取り消す'))return;
     await releasePlan(o);await dbDel('outings',o.id);outings=outings.filter(x=>x!==o);renderPlans();lastSig='';tick();toast('予定を取り消しました');}
@@ -806,18 +838,22 @@ async function goPlan(o,nurse,tag,cdate){
   addLog(o,`${o.kind}に出発（予定 ${fmt(o.departAtPlanned)} → 実際 ${fmt(now)}／帰院予定 ${fmt(o.dueAt)} は変更なし）`+tagTxt,nurse);
   rememberNurse(nurse);
   if(pt){pt.lastOutAt=now;await dbPut('patients',pt);}
-  await saveOuting(o);renderPlans();lastSig='';showTab('active');tick();toast(`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）`);
+  await saveOuting(o);renderPlans();lastSig='';showTab('active');tick();toast(`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）。間違えた時は30分以内ならカードの「GOの取消」で予定に戻せます`,7000);
 }
-function startDeparture(o){
+function startDeparture(o,mode){
+  const edit=mode==='edit';
   showTab('new');clearPatientForm();const f=nf.elements;
   f.name.value=o.name;f.pid.value=o.pid||'';f.room.value=o.room||'';f.adm.value=o.adm||'任意入院';setRadio('ward',o.ward);setRadio('kind',o.kind);
-  f.departAt.value=toLocalInput(Date.now());f.dueAt.value=toLocalInput(o.dueAt);f.dest.value=o.dest||'';f.selfTel.value=o.selfTel||'';
+  f.departAt.value=toLocalInput(edit?o.departAt:Date.now());f.dueAt.value=toLocalInput(o.dueAt);f.dest.value=o.dest||'';f.selfTel.value=o.selfTel||'';
   f.famName.value=o.famName||'';f.famRel.value=o.famRel||'';f.famTel.value=o.famTel||'';f.note.value=o.note||'';
   setRadio('alone',o.alone?'1':'0');$('#compBox').hidden=!!o.alone;f.compName.value=o.compName||'';f.compRel.value=o.compRel||'';f.compTel.value=o.compTel||'';
-  nf.dataset.planId=o.id;if(o.patientId)nf.dataset.patientId=o.patientId;
+  nf.dataset.planId=o.id;if(edit)nf.dataset.planMode='edit';if(o.patientId)nf.dataset.patientId=o.patientId;
   f.clothes.value=o.clothes||'';buildTagOptions();if(o.tagId)$('#tagSelect').value=o.tagId;updateConsent();
   pendingPhoto=null;renderPhotoPrev();if(o.hasPhoto)dbGet('photos',o.id).then(b=>{if(b&&nf.dataset.planId===o.id){pendingPhoto=b;renderPhotoPrev();}});
-  const L=$('#pLoaded');L.hidden=false;L.innerHTML=`<b>${esc(o.name)}</b> さんの${esc(o.kind)}予定（${fmt(o.departAt)}）の出発手続きです。予定で入れた服装写真・タグはそのまま入っています。変わった所だけ直し、確認した看護師を入れて登録してください。帰院予定は予定のときのままです。`;
+  const L=$('#pLoaded');L.hidden=false;L.innerHTML=(edit?`<b>${esc(o.name)}</b> さんの${esc(o.kind)}予定（${fmt(o.departAt)}）を修正しています。直したい所を変えて<b>「予定を更新」</b>を押してください。出発はまだしません。`
+    :`<b>${esc(o.name)}</b> さんの${esc(o.kind)}予定（${fmt(o.departAt)}）の出発手続きです。予定で入れた服装写真・タグはそのまま入っています。変わった所だけ直し、確認した看護師を入れて登録してください。帰院予定は予定のときのままです。`)
+    +` <button type="button" class="btn sm" id="planBack">やめて「予定」に戻る</button>`;
+  $('#planBack').addEventListener('click',()=>{clearPatientForm();nf.elements.departAt.value='';prepareNewForm();showTab('plan');toast('予定は変わっていません');});
   updatePlanMode();
 }
 
@@ -932,6 +968,10 @@ function dlgEdit(o){
     <label>修正・取消の理由<span class="req">必須</span><input name="reason" placeholder="例：出発時刻の入力間違い、別の患者で登録した"></label>
     <label>職員<span class="req">必須</span><input name="staff" list="nurseList"></label>`,
   [{label:'やめる'},
+   ...(o.status==='out'&&o.departAtPlanned?[{label:'出発を取り消して予定に戻す',cls:'',onClick:async f=>{const staff=val(f,'staff'),reason=val(f,'reason');
+     if(!reason||!staff){toast('理由（例：GOを押し間違えた）と職員を入力してください');return false;}
+     if(!await askConfirm(`${o.name} さんの出発を取り消し、出発前の予定（出発予定 ${fmt(o.departAtPlanned)}）に戻します。よろしいですか？`,'予定に戻す'))return false;
+     await undoDeparture(o,reason,staff);}}]:[]),
    {label:'誤登録として取り消す',cls:'bad',onClick:async f=>{const staff=val(f,'staff'),reason=val(f,'reason');
      if(!reason||!staff){toast('取消の理由と職員を入力してください');return false;}
      if(!await askConfirm(`${o.name} さんのこの登録を誤登録として取り消します。一覧やアラームの対象から外れ、記録には「取消」と残ります。よろしいですか？`,'取り消す'))return false;
@@ -952,6 +992,20 @@ function dlgEdit(o){
      if(isActive(o)){const pp=patients.find(x=>x.id===o.patientId);if(pp){['selfTel','famTel'].forEach(k=>{if(f.elements[k])pp[k]=o[k];});dbPut('patients',pp);}}
      addLog(o,`登録内容を修正（${ch.join('、')}）理由：${reason}`,staff);rememberNurse(staff);await saveOuting(o);lastSig='';tick();
      if($('#sec-history').classList.contains('active'))renderHistory();toast('修正を保存しました');}}]);
+}
+function dlgUndo(o){
+  openDlg(`GOの取消：${o.name}`,`<p class="hint" style="margin-top:0">${fmt(o.departAt)} の出発を取り消し、出発前の予定（出発予定 ${fmt(o.departAtPlanned)}・帰院予定 ${fmt(o.dueAt)}）に戻します。${o.tagId?`タグ ${esc(o.tagId)} は予約に戻ります。`:''}取り消したことは経過に残ります。</p>
+    <label>理由<span class="req">必須</span><input name="reason" placeholder="例：GOを押し間違えた、出発が延期になった"></label>${memoChips('undo','reason')}
+    <label>職員<span class="req">必須</span><input name="staff" list="nurseList"></label>`,
+  [{label:'やめる'},{label:'予定に戻す',cls:'pri',onClick:async f=>{const reason=val(f,'reason'),staff=val(f,'staff');
+    if(!reason||!staff){toast('理由と職員を入力してください');return false;}
+    rememberMemo('undo',reason);await undoDeparture(o,reason,staff);}}]);
+}
+async function undoDeparture(o,reason,staff){
+  const was=o.departAt;o.status='planned';o.departAt=o.departAtPlanned;o.departNurse=o.planNurse||o.departNurse;delete o.departAtPlanned;delete o.planNurse;delete o.ackAt;
+  if(o.tagId){const t=tags.find(x=>x.id===o.tagId);if(t&&t.outingId===o.id){t.status='reserved';await saveTag(t);}}
+  addLog(o,`出発を取り消して予定に戻した（${fmt(was)} の出発を取消、出発予定 ${fmt(o.departAt)}）理由：${reason}`+(o.tagId?`（タグ ${o.tagId} は予約に戻した）`:''),staff);rememberNurse(staff);
+  await saveOuting(o);lastSig='';tick();renderPlans();showTab('plan');toast(`${o.name} さんを予定に戻しました`);
 }
 async function cancelOuting(o,reason,staff){
   const was=o.status;o.status='cancelled';o.cancelledAt=Date.now();o.cancelReason=reason;
@@ -1002,7 +1056,7 @@ function fillPatient(p){
   if(!f.departAt.value)f.departAt.value=toLocalInput(Date.now());
   updateConsent();
 }
-function clearPatientForm(){const keep=nf.elements.departAt.value;const hadPlan=!!nf.dataset.planId;nf.reset();nf.elements.departAt.value=keep;delete nf.dataset.patientId;delete nf.dataset.planId;if(hadPlan){pendingPhoto=null;renderPhotoPrev();buildTagOptions();}$('#pLoaded').hidden=true;$('#compBox').hidden=true;renderDestList(null);updateConsent();}
+function clearPatientForm(){const keep=nf.elements.departAt.value;const hadPlan=!!nf.dataset.planId;nf.reset();nf.elements.departAt.value=keep;delete nf.dataset.patientId;delete nf.dataset.planId;delete nf.dataset.planMode;if(hadPlan){pendingPhoto=null;renderPhotoPrev();buildTagOptions();}$('#pLoaded').hidden=true;$('#compBox').hidden=true;renderDestList(null);updateConsent();}
 $('#pSearch').addEventListener('input',renderPatientChips);
 $('#pChips').addEventListener('click',e=>{const b=e.target.closest('[data-pt]');if(!b)return;const p=patients.find(x=>x.id===b.dataset.pt);if(!p)return;
   if(outings.some(o=>isActive(o)&&o.patientId===p.id)){toast(`${p.name} さんは現在外出中です。帰院登録を確認してください。`,4500);}
@@ -1016,10 +1070,10 @@ async function upsertPatient(o,loadedId){
   if(o.demo)p.demo=true;
   await dbPut('patients',p);return p;
 }
-function isPlanForm(){const d=fromLocalInput(nf.elements.departAt.value);return !nf.dataset.planId&&d&&d>Date.now()+PLAN_MIN*60000;}
+function isPlanForm(){const d=fromLocalInput(nf.elements.departAt.value);return (!nf.dataset.planId||nf.dataset.planMode==='edit')&&d&&d>Date.now()+PLAN_MIN*60000;}
 function updatePlanMode(){const plan=isPlanForm();$('#fsClothes').hidden=false;$('#fsTag').hidden=false;{const o0=$('#tagSelect').options[0];if(o0&&o0.value==='')o0.textContent=plan?'タグなし（出発時に選ぶ）':'タグなし';}
   const n=$('#planNote');n.hidden=!plan;n.innerHTML=plan?'<b>出発日時が先なので「予定」として登録します。</b>服装の写真をここで撮っておけば、当日は「予定」タブの<b>「出発（GO）」</b>でタグを選んで看護師名を入れるだけです。<b>タグは「タグなし」のままでOK（出発時に選びます）</b>。ここでタグを選ぶと「予約中」になり、出発日まで他の患者には使えません。<b>帰院予定は、出発が早まっても遅れても変わりません。</b>':'';
-  $('#submitBtn').textContent=plan?'予定として登録':'この内容で出発を登録';
+  $('#submitBtn').textContent=plan?(nf.dataset.planMode==='edit'?'予定を更新':'予定として登録'):'この内容で出発を登録';
   const lb=nf.querySelector('input[name=departNurse]').closest('label');lb.firstChild.textContent=plan?'登録した看護師':'確認した看護師';}
 nf.elements.departAt.addEventListener('input',updatePlanMode);nf.elements.departAt.addEventListener('change',updatePlanMode);
 function formPatient(){const f=nf.elements;const name=f.name.value.trim(),pid=f.pid.value.trim();let p=nf.dataset.patientId&&patients.find(x=>x.id===nf.dataset.patientId);
@@ -1094,15 +1148,16 @@ async function registerOuting(){
   else if(tagId&&cs.st==='none'&&(!f.elements.consent?.checked||!val(f,'consentDate')))E.push({msg:`タグ ${tagId} を渡すには、同意書の取得日を入れて「同意書を確認した」にチェックしてください（渡さない場合はタグ番号を「タグなし」に）`,el:$('#consentBox')});
   if(!nurse)E.push({msg:plan?'登録した看護師名を入力してください':'出発を確認した看護師名を入力してください',el:el('departNurse')});
   showFormErrors(E);if(E.length)return;
-  if(outings.some(o=>isActive(o)&&(o.pid===val(f,'pid')||(nf.dataset.patientId&&o.patientId===nf.dataset.patientId)))&&!await askConfirm(`${name} さんは既に外出・外泊中として登録されています。続けますか？`))return;
+  if(outings.some(o=>isActive(o)&&o.id!==nf.dataset.planId&&(o.pid===val(f,'pid')||(nf.dataset.patientId&&o.patientId===nf.dataset.patientId)))&&!await askConfirm(`${name} さんは既に外出・外泊中として登録されています。続けますか？`))return;
   const now=Date.now();
   const o={id:uid(),name,pid:val(f,'pid'),ward:f.elements.ward.value,room:val(f,'room'),adm:val(f,'adm'),kind:f.elements.kind.value,departAt,dueAt,dueAtOriginal:dueAt,
     dest:val(f,'dest'),selfTel:val(f,'selfTel'),famName:val(f,'famName'),famRel:val(f,'famRel'),famTel:val(f,'famTel'),alone,compName:alone?'':val(f,'compName'),compRel:alone?'':val(f,'compRel'),compTel:alone?'':val(f,'compTel'),
     clothes:val(f,'clothes'),tagId,consent:!!tagId,consentDate:tagId?(cs.st==='ok'?cs.date:val(f,'consentDate')):'',departNurse:nurse,note:val(f,'note'),status:plan?'planned':'out',createdAt:now,hasPhoto:!!pendingPhoto,log:[]};
-  const planSrc=nf.dataset.planId&&outings.find(x=>x.id===nf.dataset.planId);if(planSrc){o.log=[...(planSrc.log||[])];o.departAtPlanned=planSrc.departAt;o.planNurse=planSrc.departNurse;}
+  const planSrc=nf.dataset.planId&&outings.find(x=>x.id===nf.dataset.planId);if(planSrc){o.log=[...(planSrc.log||[])];if(!plan){o.departAtPlanned=planSrc.departAt;o.planNurse=planSrc.departNurse;}}
   const pt=await upsertPatient(o,nf.dataset.patientId);o.patientId=pt.id;
   if(tagId&&cs.st==='none'){pt.consentDate=o.consentDate;pt.consentLog=[...(pt.consentLog||[]),{at:Date.now(),text:`同意書取得日を ${ymd(o.consentDate)} に登録（外出登録時）`,by:nurse}];await dbPut('patients',pt);}
-  if(plan)addLog(o,`${o.kind}の予定を登録（出発予定 ${fmt(departAt)}）`+(tagId?`（タグ ${tagId} を予約）`:''),nurse);else addLog(o,`${o.kind}に出発`+(tagId?`（タグ ${tagId} 貸出・同意書 ${ymd(o.consentDate)} 取得）`:'（タグなし）'),nurse);
+  if(plan&&planSrc)addLog(o,`${o.kind}の予定を修正（出発予定 ${fmt(planSrc.departAt)}→${fmt(departAt)}、帰院予定 ${fmt(dueAt)}）`+(tagId?`（タグ ${tagId} を予約）`:'（タグは出発時に選ぶ）'),nurse);
+  else if(plan)addLog(o,`${o.kind}の予定を登録（出発予定 ${fmt(departAt)}）`+(tagId?`（タグ ${tagId} を予約）`:''),nurse);else addLog(o,`${o.kind}に出発`+(tagId?`（タグ ${tagId} 貸出・同意書 ${ymd(o.consentDate)} 取得）`:'（タグなし）'),nurse);
   if(pendingPhoto&&!(planSrc&&planSrc.hasPhoto))addLog(o,'服装写真を登録');
   await saveOuting(o);if(pendingPhoto)await dbPut('photos',pendingPhoto,o.id);
   if(planSrc){if(planSrc.tagId&&planSrc.tagId!==tagId){const t0=tags.find(x=>x.id===planSrc.tagId);if(t0&&t0.outingId===planSrc.id){t0.status='available';t0.outingId=null;await saveTag(t0);}}
@@ -1110,8 +1165,8 @@ async function registerOuting(){
     await dbDel('outings',planSrc.id);outings=outings.filter(x=>x!==planSrc);}
   if(tagId){const t=tags.find(x=>x.id===tagId);if(t){t.status=plan?'reserved':'inuse';t.outingId=o.id;await saveTag(t);}}
   outings.push(o);rememberNurse(nurse);
-  f.reset();pendingPhoto=null;$('#compBox').hidden=true;f.elements.departAt.value='';delete nf.dataset.patientId;delete nf.dataset.planId;$('#pLoaded').hidden=true;$('#pSearch').value='';updateConsent();attachNurseChips(nf);
-  toast(plan?`${name} さんの${o.kind}予定を登録しました（「予定」タブ）`:`${name} さんの${o.kind}を登録しました`);lastSig='';showTab(plan?'plan':'active');tick();
+  f.reset();pendingPhoto=null;$('#compBox').hidden=true;f.elements.departAt.value='';delete nf.dataset.patientId;delete nf.dataset.planId;delete nf.dataset.planMode;$('#pLoaded').hidden=true;$('#pSearch').value='';updateConsent();attachNurseChips(nf);
+  toast(plan?(planSrc?`${name} さんの${o.kind}予定を更新しました（「予定」タブ）`:`${name} さんの${o.kind}予定を登録しました（「予定」タブ）`):`${name} さんの${o.kind}を登録しました`);lastSig='';showTab(plan?'plan':'active');tick();
 }
 
 /* ---------- 日別一覧 ---------- */
@@ -1412,7 +1467,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.2.0';
+const APP_VERSION='1.4.0';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
