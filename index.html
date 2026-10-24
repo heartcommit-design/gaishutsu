@@ -125,6 +125,7 @@ video{width:100%;border-radius:8px;background:#000}
 .rc input[type=checkbox]{width:22px;height:22px;margin:0}
 .rc input[type=text],.rc input:not([type]){min-width:0;width:100%}
 .nchips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+.mchips .nchip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nchip{font-size:14px;padding:5px 11px;border-radius:16px;border:1px solid #aab4c1;background:#f4f7fb;cursor:pointer;color:var(--ink)}
 .nchip:hover{background:#e7f1fb}
 .cstat{padding:8px 12px;border-radius:8px;font-size:15px;margin-top:8px;font-weight:700}
@@ -173,6 +174,11 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
 .errbox b{display:block;font-size:18px;margin-bottom:4px}
 .errbox ul{margin:4px 0 0;padding-left:22px}
 .invalid{outline:3px solid var(--bad)!important;outline-offset:2px;border-radius:8px}
+.tp{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.tp select{flex:1 1 150px;min-width:0}
+.tp select.tp-t{flex:0 1 130px}
+.tp .tp-fine{white-space:nowrap}
+.tp input{flex:1 1 220px}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .chip{font-size:16px;padding:8px 14px;border-radius:22px;border:1px solid #aab4c1;background:#fff;cursor:pointer;color:var(--ink);text-align:left;line-height:1.3}
 .chip small{display:block;color:var(--sub);font-size:13px}
@@ -264,7 +270,7 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
 <!-- 予定 -->
 <section id="sec-plan">
   <h2>出発前の予定</h2>
-  <p class="hint" style="margin-top:0">出発日時が先の登録はここに入ります。当日、患者が出発するときに「出発手続き」を押し、服装の撮影・タグ・確認看護師を入れて登録すると「外出・外泊中」に移ります。予定のあいだはタグを確保しません。</p>
+  <p class="hint" style="margin-top:0">出発日時が先の登録はここに入ります。予定の段階で服装写真を撮っておけば、出発の時は<b>「出発（GO）」を押し、渡すタグと看護師名を選ぶだけ</b>です。タグは予定で予約しておくこともできます（予約すると出発日まで他の患者には使えません）。<b>帰院予定は、出発が早まっても遅れても変わりません。</b>写真を直したい時は「内容を確認・変更して出発」を使います。</p>
   <div class="cards" id="planList"></div>
 </section>
 
@@ -487,7 +493,7 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
   <div class="panel" style="margin-top:14px">
     <h2>iPadで使うときの注意</h2>
     <ul class="hint" style="margin:0;padding-left:20px">
-      <li>アラームは、この画面が表示されている間だけ鳴ります。Safariを閉じる・他のアプリに切り替える・画面が消えると鳴りません。</li>
+      <li>アラームは、この画面が表示されている間だけ鳴ります。このアプリを閉じる・他のアプリに切り替える・画面が消えると鳴りません。</li>
       <li>「設定」→「画面表示と明るさ」→「自動ロック」を「なし」にしてください。上部の「画面オン維持」が有効でも、念のため設定してください。</li>
       <li>他のアプリに切り替えられないよう、「設定」→「アクセシビリティ」→「アクセスガイド」で固定する方法もあります。</li>
       <li>消音・集中モードのときに音が鳴るかは、実際のiPadで「アラーム音を試す」を押して確認してください。</li>
@@ -516,6 +522,47 @@ function fmt(ts){if(!ts)return '';const d=new Date(ts);return `${d.getMonth()+1}
 function fmtFull(ts){if(!ts)return '';const d=new Date(ts);return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;}
 function toLocalInput(ts){const d=new Date(ts);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;}
 function toDateInput(ts){const d=new Date(ts);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+
+/* ---------- 時刻：15分刻みで選ぶ（細かくしたい時だけ数値入力） ---------- */
+const TP_DESC=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+
+function round15(ts){return Math.round(ts/900000)*900000;}
+function enhanceTime(inp){
+  if(inp._tp)return;
+  const wrap=document.createElement('div');wrap.className='tp';
+  wrap.innerHTML='<select class="tp-d" aria-label="日付"></select><select class="tp-t" aria-label="時刻"></select><button type="button" class="btn sm tp-fine">細かく入力</button>';
+  inp.before(wrap);wrap.insertBefore(inp,wrap.querySelector('.tp-fine'));inp._tp=wrap;
+  const sd=wrap.querySelector('.tp-d'),st=wrap.querySelector('.tp-t'),bf=wrap.querySelector('.tp-fine');
+  let fine=false;
+  const setMode=f=>{fine=f;inp.hidden=!f;sd.hidden=f;st.hidden=f;bf.textContent=f?'15分刻みで選ぶ':'細かく入力';inp.step=f?60:900;};
+  const raw=()=>TP_DESC.get.call(inp);
+  const push=v=>{TP_DESC.set.call(inp,v);inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));};
+  function sync(){
+    const v=raw();const cur=fromLocalInput(v);const today=new Date();today.setHours(0,0,0,0);
+    const days=[];for(let i=-7;i<=14;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
+    let curDay=null,curHM='';
+    if(cur){const d=new Date(cur);curHM=pad(d.getHours())+':'+pad(d.getMinutes());d.setHours(0,0,0,0);curDay=d;
+      if(!days.some(x=>x.getTime()===d.getTime())){days.push(d);days.sort((a,b)=>a-b);}}
+    const rel={'-1':'昨日 ','0':'今日 ','1':'明日 ','2':'明後日 '};
+    sd.innerHTML=(cur?'':'<option value="">— 日付 —</option>')+days.map(d=>{const k=Math.round((d-today)/86400000);const ds=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      return `<option value="${ds}"${curDay&&d.getTime()===curDay.getTime()?' selected':''}>${rel[k]||''}${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]})</option>`;}).join('');
+    const hm=[];for(let m=0;m<1440;m+=15)hm.push(pad(Math.floor(m/60))+':'+pad(m%60));
+    if(curHM&&!hm.includes(curHM)){hm.push(curHM);hm.sort();}
+    st.innerHTML=(cur?'':'<option value="">— 時刻 —</option>')+hm.map(t=>`<option value="${t}"${t===curHM?' selected':''}>${t}</option>`).join('');
+  }
+  function fromSel(){
+    let d=sd.value,t=st.value;
+    if(!t)return;                                  // 時刻が未選択なら値は入れない
+    if(!d){const n=new Date();d=`${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}`;}
+    push(d+'T'+t);sync();
+  }
+  sd.addEventListener('change',fromSel);st.addEventListener('change',fromSel);
+  bf.addEventListener('click',()=>{setMode(!fine);if(fine)inp.focus();else sync();});
+  inp.addEventListener('input',()=>{if(fine)sync();});
+  Object.defineProperty(inp,'value',{get(){return raw();},set(v){TP_DESC.set.call(inp,v);if(v)wrap.classList.remove('invalid');sync();},configurable:true});
+  inp._tpSync=sync;setMode(false);sync();
+}
+function enhanceTimes(root){root.querySelectorAll('input[type="datetime-local"]').forEach(enhanceTime);}
 function fromLocalInput(v){if(!v)return null;const t=new Date(v).getTime();return isNaN(t)?null:t;}
 function dur(ms){const m=Math.floor(Math.abs(ms)/60000);const h=Math.floor(m/60),mm=m%60;if(h>=24)return `${Math.floor(h/24)}日${h%24}時間`;return h?`${h}時間${mm}分`:`${mm}分`;}
 function toast(msg,ms=3200){const t=$('#toast');t.textContent=msg;t.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(()=>t.style.display='none',ms);}
@@ -540,14 +587,14 @@ const dbClear=s=>tx(s,'readwrite',st=>st.clear());
 let outings=[],tags=[],patients=[];
 const WARDS=['東1','東2','東3','東4','西1','西2','西3','本3'];
 const wardText=o=>[o.ward,o.room?o.room+'号室':''].filter(Boolean).join(' ');
-let settings={preMin:15,realertMin:10,volume:0.7,nurses:[],escalateMin:10,idleMin:30,backupHour:17,mask:false,gaps:[],quietFrom:17,quietTo:8,printHours:[8,17]};
+let settings={preMin:15,realertMin:10,volume:0.7,nurses:[],escalateMin:10,idleMin:30,backupHour:17,mask:false,gaps:[],quietFrom:17,quietTo:8,printHours:[8,17],memos:{}};
 const photoURL={};
 let pendingPhoto=null;
 const saveOuting=o=>dbPut('outings',o);
 const saveTag=t=>dbPut('tags',t);
 const saveSettings=()=>dbPut('settings',settings,'main');
 const tagSort=(a,b)=>a.id.localeCompare(b.id,'ja',{numeric:true});
-const TAG_ST={available:'利用可',inuse:'貸出中',missing:'未回収',maint:'点検・電池交換'};
+const TAG_ST={available:'利用可',reserved:'予約中',inuse:'貸出中',missing:'未回収',maint:'点検・電池交換'};
 
 async function loadAll(){
   outings=await dbAll('outings');patients=await dbAll('patients');tags=(await dbAll('tags')).sort(tagSort);
@@ -562,6 +609,10 @@ async function purgePhotos(){
 }
 async function getPhotoURL(id){if(photoURL[id])return photoURL[id];const b=await dbGet('photos',id);if(!b)return null;photoURL[id]=URL.createObjectURL(b);return photoURL[id];}
 function dropPhotoURL(id){if(photoURL[id]){URL.revokeObjectURL(photoURL[id]);delete photoURL[id];}}
+function rememberMemo(key,t){t=(t||'').trim();if(!t)return;if(!settings.memos)settings.memos={};settings.memos[key]=[t,...(settings.memos[key]||[]).filter(x=>x!==t)].slice(0,30);saveSettings();}
+function memoChips(key,field){const l=((settings.memos||{})[key]||[]).slice(0,10);if(!l.length)return '';
+  return `<div class="nchips mchips">${l.map(t=>`<button type="button" class="nchip" data-memo="${esc(t)}" data-field="${field}" title="${esc(t)}">${esc(t)}</button>`).join('')}</div><p class="hint" style="margin:0 0 4px">前に入れた内容から選べます（選んだ後に書き足しても構いません）</p>`;}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-memo]');if(!b)return;e.preventDefault();const f=b.closest('form');const inp=f&&f.elements[b.dataset.field];if(!inp)return;inp.value=b.dataset.memo;inp.dispatchEvent(new Event('input',{bubbles:true}));inp.focus();});
 function rememberNurse(n){n=(n||'').trim();if(!n)return;settings.nurses=[n,...settings.nurses.filter(x=>x!==n)].slice(0,40);saveSettings();renderNurseList();}
 function renderNurseList(){$('#nurseList').innerHTML=settings.nurses.map(n=>`<option value="${esc(n)}">`).join('');}
 function addLog(o,text,by){o.log=o.log||[];o.log.push({at:Date.now(),text,by:by||''});}
@@ -677,30 +728,96 @@ $('#activeList').addEventListener('click',e=>{
 $('#printBtn').addEventListener('click',async()=>{showTab('active');$('#printHead').textContent='外出・外泊中一覧　印刷：'+fmtFull(Date.now());const now=Date.now();const h=(settings.printHours||[]).filter(x=>new Date(now).getHours()>=x).slice(-1)[0];if(h!==undefined){settings.prDoneKey=toDateInput(now)+':'+h;await saveSettings();$('#prBar').hidden=true;}try{window.print();}catch(e){toast('この画面からは印刷できません。SafariやChromeで直接開いてください。',6000);}});
 
 /* ---------- 予定 ---------- */
-function renderPlans(){
+async function renderPlans(){
   const now=Date.now();const list=outings.filter(o=>o.status==='planned').sort((a,b)=>a.departAt-b.departAt);
   $('#cntPlan').textContent=list.length;
-  $('#planList').innerHTML=list.map(o=>{const late=o.departAt<now;
+  const urls={};for(const o of list){if(o.hasPhoto&&!isMasked(o))urls[o.id]=await getPhotoURL(o.id);}
+  $('#planList').innerHTML=list.map(o=>{const late=o.departAt<now;const mk=isMasked(o);
+    const ready=[o.tagId?'タグ '+esc(o.tagId)+' 予約済み':'タグは出発時に選ぶ',o.hasPhoto?'服装写真あり':'服装写真なし'];
     return `<article class="card" data-id="${o.id}" style="${late?'border-color:var(--warn);background:var(--warnbg)':''}">
-     <div class="head"><div class="who"><div class="name">${esc(shownName(o))}</div><div class="sub">${esc([wardText(o),o.adm,(o.pid&&!isMasked(o))?'ID '+o.pid:''].filter(Boolean).join('・'))}</div></div>
+     <div class="head">${o.tagId?`<div class="tagbadge">${esc(o.tagId)}</div>`:'<div class="tagbadge none">タグ<br>出発時</div>'}<div class="who"><div class="name">${esc(shownName(o))}</div><div class="sub">${esc([wardText(o),o.adm,(o.pid&&!mk)?'ID '+o.pid:''].filter(Boolean).join('・'))}</div></div>
      <div class="statebox"><span class="lbl lbl-planned">${esc(stLabel(o,'planned'))}</span><div class="count" style="font-size:20px">${late?dur(now-o.departAt)+' 経過':'出発まで '+dur(o.departAt-now)}</div></div></div>
-     <dl class="info" style="margin-top:10px"><dt>出発予定</dt><dd>${fmt(o.departAt)}</dd><dt>帰院予定</dt><dd>${fmt(o.dueAt)}</dd><dt>区分</dt><dd>${esc(o.kind)}</dd>
-     <dt>行き先</dt><dd>${esc(o.dest)||'—'}</dd><dt>同行</dt><dd>${o.alone?'単独':(isMasked(o)?'同行あり':esc(o.compName)+(o.compRel?'（'+esc(o.compRel)+'）':''))}</dd><dt>登録</dt><dd>${esc(o.departNurse)}</dd></dl>
-     <div class="actions"><button class="btn pri" data-pact="go">出発手続き</button><button class="btn" data-pact="cancel">予定を取り消す</button></div></article>`;}).join('')
+     <div class="body">${urls[o.id]?`<img class="thumb" src="${urls[o.id]}" alt="服装写真" data-pact="photo">`:(mk&&o.hasPhoto?'<div class="nophoto">写真あり<br>（表示で確認）</div>':'<div class="nophoto">写真なし<br>（出発時でも可）</div>')}
+     <dl class="info"><dt>出発予定</dt><dd>${fmt(o.departAt)}</dd><dt>帰院予定</dt><dd><b>${fmt(o.dueAt)}</b>（出発が前後しても変わりません）</dd><dt>区分</dt><dd>${esc(o.kind)}</dd>
+     <dt>行き先</dt><dd>${esc(o.dest)||'—'}</dd><dt>同行</dt><dd>${o.alone?'単独':(mk?'同行あり':esc(o.compName)+(o.compRel?'（'+esc(o.compRel)+'）':''))}</dd>
+     <dt>準備</dt><dd>${ready.join('・')}</dd><dt>登録</dt><dd>${esc(o.departNurse)}</dd></dl></div>
+     <div class="actions"><button class="btn ok big" data-pact="go" style="font-size:20px;padding:12px 30px">出発（GO）</button><button class="btn" data-pact="edit">内容を確認・変更して出発</button><button class="btn" data-pact="cancel">予定を取り消す</button></div></article>`;}).join('')
    ||'<div class="empty">出発前の予定はありません。</div>';
 }
 $('#planList').addEventListener('click',async e=>{const b=e.target.closest('[data-pact]');if(!b)return;const o=outings.find(x=>x.id===b.closest('.card').dataset.id);if(!o)return;
-  if(b.dataset.pact==='go')startDeparture(o);
-  if(b.dataset.pact==='cancel'){if(!await askConfirm(`${o.name} さんの${o.kind}予定（${fmt(o.departAt)}）を取り消しますか？`,'取り消す'))return;await dbDel('outings',o.id);outings=outings.filter(x=>x!==o);renderPlans();lastSig='';tick();toast('予定を取り消しました');}
+  if(b.dataset.pact==='go')dlgGo(o);
+  if(b.dataset.pact==='edit')startDeparture(o);
+  if(b.dataset.pact==='photo')dlgPhoto(o);
+  if(b.dataset.pact==='cancel'){if(!await askConfirm(`${o.name} さんの${o.kind}予定（${fmt(o.departAt)}）を取り消しますか？`+(o.tagId?`予約していたタグ ${o.tagId} は空きに戻ります。`:''),'取り消す'))return;
+    await releasePlan(o);await dbDel('outings',o.id);outings=outings.filter(x=>x!==o);renderPlans();lastSig='';tick();toast('予定を取り消しました');}
 });
+async function releasePlan(o){
+  if(o.tagId){const t=tags.find(x=>x.id===o.tagId);if(t&&t.outingId===o.id&&t.status==='reserved'){t.status='available';t.outingId=null;await saveTag(t);}}
+  if(o.hasPhoto){await dbDel('photos',o.id);dropPhotoURL(o.id);}
+}
+function planPatient(o){return patients.find(x=>x.id===o.patientId)||(o.pid?patients.find(x=>x.pid===o.pid):null)||null;}
+function goTagOptions(o){
+  const av=tags.filter(t=>t.status==='available'||(t.status==='reserved'&&t.outingId===o.id));
+  return (o.tagId?'':'<option value="__">— タグを選んでください —</option>')+av.map(t=>`<option value="${esc(t.id)}"${t.id===o.tagId?' selected':''}>${esc(t.id)}${t.findName&&t.findName!==t.id?'（'+esc(t.findName)+'）':''}${t.status==='reserved'?'（この予定で予約中）':''}</option>`).join('')+'<option value="">タグなし（持たせない）</option>';
+}
+function goConsentHtml(o,tag){
+  if(!tag||tag==='__')return '';const c=consentState(planPatient(o));
+  if(c.st==='ok')return `<div class="cstat ok">✓ 同意書あり（${ymd(c.date)} 取得）</div>`;
+  if(c.st==='withdrawn')return `<div class="cstat ng">${ymd(c.date)} に同意を撤回しています。タグは渡せません（「タグなし」を選んでください）。</div>`;
+  return `<div class="cstat need">同意書が患者台帳に未登録です。確認して取得日を入れてください。</div>
+    <label style="margin-top:6px">同意書の取得日<input type="date" name="gcDate" value="${toDateInput(Date.now())}"></label>
+    <label class="consent"><input type="checkbox" name="gcOk">同意書を確認した（医療保護入院の場合は家族等の同意も含む）</label>`;
+}
+function dlgGo(o){
+  const now=Date.now();
+  if(now>=o.dueAt){toast('帰院予定の時刻をすでに過ぎています。「内容を確認・変更して出発」で帰院予定を直してください。',7000);return;}
+  const diff=Math.round((now-o.departAt)/60000);
+  const nAv=tags.filter(t=>t.status==='available').length;
+  openDlg(`出発（GO）：${o.name}`,`
+    <dl class="info"><dt>出発</dt><dd><b>今（${fmt(now)}）</b>${Math.abs(diff)>=1?`<span class="sub">　予定より${dur(Math.abs(diff)*60000)}${diff>0?'遅い':'早い'}</span>`:''}</dd>
+    <dt>帰院予定</dt><dd><b>${fmt(o.dueAt)}</b>（変わりません）</dd><dt>服装写真</dt><dd>${o.hasPhoto?'あり':'なし（必要なら「やめる」→ カードの「内容を確認・変更して出発」で撮影）'}</dd></dl>
+    <label style="margin-top:10px">渡すタグ<span class="req">必須</span><select name="goTag" id="goTag">${goTagOptions(o)}</select></label>
+    <p class="hint" style="margin:4px 0 0">${o.tagId?`予定のときに ${esc(o.tagId)} を予約しています。別のタグに替えると、予約していたタグは空きに戻ります。`:`空いているタグ：${nAv}個。実際に渡すタグの番号を選んでください。`}</p>
+    <div id="goConsent" style="margin-top:6px">${goConsentHtml(o,o.tagId)}</div>
+    <label style="margin-top:10px">出発を確認した看護師<span class="req">必須</span><input name="nurse" list="nurseList"></label>`,
+  [{label:'やめる'},{label:'出発（GO）',cls:'ok',onClick:async f=>{
+    const tag=val(f,'goTag');const nurse=val(f,'nurse');
+    if(tag==='__'){toast('渡すタグを選んでください（渡さない時は「タグなし」）');return false;}
+    let cdate='';
+    if(tag){const c=consentState(planPatient(o));
+      if(c.st==='withdrawn'){toast('同意を撤回している患者にはタグを渡せません。「タグなし」を選んでください。',5000);return false;}
+      if(c.st==='none'){cdate=val(f,'gcDate');if(!cdate||!f.elements.gcOk?.checked){toast('タグを渡すには、同意書の取得日を入れて「同意書を確認した」にチェックしてください',5000);return false;}}
+      else cdate=c.date;
+      const t=tags.find(x=>x.id===tag);if(!t||!(t.status==='available'||(t.status==='reserved'&&t.outingId===o.id))){toast(`タグ ${tag} は使えなくなっています。別のタグを選んでください。`,5000);return false;}}
+    if(!nurse){toast('出発を確認した看護師を選んでください');return false;}
+    await goPlan(o,nurse,tag,cdate);}}]);
+  $('#goTag').addEventListener('change',e=>{$('#goConsent').innerHTML=goConsentHtml(o,e.target.value);});
+}
+async function goPlan(o,nurse,tag,cdate){
+  const now=Date.now();if(tag===undefined)tag=o.tagId||'';
+  const before=o.tagId||'';
+  if(before&&before!==tag){const t=tags.find(x=>x.id===before);if(t&&t.outingId===o.id&&t.status==='reserved'){t.status='available';t.outingId=null;await saveTag(t);}}
+  o.departAtPlanned=o.departAt;o.planNurse=o.departNurse;o.departAt=now;o.departNurse=nurse;o.status='out';
+  o.tagId=tag;o.consent=!!tag;o.consentDate=tag?(cdate||o.consentDate||''):'';
+  if(tag){const t=tags.find(x=>x.id===tag);if(t){t.status='inuse';t.outingId=o.id;await saveTag(t);}}
+  const pt=planPatient(o);
+  if(tag&&pt&&consentState(pt).st==='none'&&cdate){pt.consentDate=cdate;pt.consentLog=[...(pt.consentLog||[]),{at:now,text:`同意書取得日を ${ymd(cdate)} に登録（出発時）`,by:nurse}];}
+  const tagTxt=tag?(before&&before!==tag?`（予約 ${before} → タグ ${tag} 貸出）`:`（タグ ${tag} 貸出）`):(before?`（予約していた ${before} は使わず・タグなし）`:'（タグなし）');
+  addLog(o,`${o.kind}に出発（予定 ${fmt(o.departAtPlanned)} → 実際 ${fmt(now)}／帰院予定 ${fmt(o.dueAt)} は変更なし）`+tagTxt,nurse);
+  rememberNurse(nurse);
+  if(pt){pt.lastOutAt=now;await dbPut('patients',pt);}
+  await saveOuting(o);renderPlans();lastSig='';showTab('active');tick();toast(`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）`);
+}
 function startDeparture(o){
   showTab('new');clearPatientForm();const f=nf.elements;
   f.name.value=o.name;f.pid.value=o.pid||'';f.room.value=o.room||'';f.adm.value=o.adm||'任意入院';setRadio('ward',o.ward);setRadio('kind',o.kind);
   f.departAt.value=toLocalInput(Date.now());f.dueAt.value=toLocalInput(o.dueAt);f.dest.value=o.dest||'';f.selfTel.value=o.selfTel||'';
   f.famName.value=o.famName||'';f.famRel.value=o.famRel||'';f.famTel.value=o.famTel||'';f.note.value=o.note||'';
   setRadio('alone',o.alone?'1':'0');$('#compBox').hidden=!!o.alone;f.compName.value=o.compName||'';f.compRel.value=o.compRel||'';f.compTel.value=o.compTel||'';
-  nf.dataset.planId=o.id;if(o.patientId)nf.dataset.patientId=o.patientId;updateConsent();
-  const L=$('#pLoaded');L.hidden=false;L.innerHTML=`<b>${esc(o.name)}</b> さんの${esc(o.kind)}予定（${fmt(o.departAt)}）の出発手続きです。服装の撮影・タグ・確認した看護師を入れて登録してください。帰院予定も確認してください。`;
+  nf.dataset.planId=o.id;if(o.patientId)nf.dataset.patientId=o.patientId;
+  f.clothes.value=o.clothes||'';buildTagOptions();if(o.tagId)$('#tagSelect').value=o.tagId;updateConsent();
+  pendingPhoto=null;renderPhotoPrev();if(o.hasPhoto)dbGet('photos',o.id).then(b=>{if(b&&nf.dataset.planId===o.id){pendingPhoto=b;renderPhotoPrev();}});
+  const L=$('#pLoaded');L.hidden=false;L.innerHTML=`<b>${esc(o.name)}</b> さんの${esc(o.kind)}予定（${fmt(o.departAt)}）の出発手続きです。予定で入れた服装写真・タグはそのまま入っています。変わった所だけ直し、確認した看護師を入れて登録してください。帰院予定は予定のときのままです。`;
   updatePlanMode();
 }
 
@@ -709,7 +826,7 @@ function openDlg(title,body,buttons){
   $('#dlgTitle').textContent=title;$('#dlgBody').innerHTML=body;const a=$('#dlgActions');a.innerHTML='';
   buttons.forEach(bt=>{const el=document.createElement('button');el.type='button';el.className='btn '+(bt.cls||'');el.textContent=bt.label;
     el.addEventListener('click',async()=>{const r=bt.onClick?await bt.onClick($('#dlgForm')):true;if(r!==false)$('#dlg').close();});a.appendChild(el);});
-  attachNurseChips($('#dlgBody'));
+  attachNurseChips($('#dlgBody'));enhanceTimes($('#dlgBody'));
   if(!$('#dlg').open)$('#dlg').showModal();
 }
 const val=(f,n)=>(f.elements[n]?.value||'').trim();
@@ -767,8 +884,8 @@ function dlgLost(o){
 function dlgExtend(o,resolveSearch){
   openDlg(resolveSearch?`所在確認・捜索終了：${o.name}`:`帰院予定の変更：${o.name}`,`
     ${resolveSearch?'<p class="hint" style="margin-top:0">捜索を終え「外出中」に戻します。新しい帰院予定を入れてください。帰院済みなら「帰院した」を使ってください。</p>':''}
-    <label>新しい帰院予定<input type="datetime-local" name="due" value="${toLocalInput(Math.max(o.dueAt,Date.now()+3600000))}"></label>
-    <label>理由・状況<span class="req">必須</span><input name="reason" placeholder="${resolveSearch?'例：家族と合流、〇〇にいることを確認':'例：家族から電話、渋滞のため'}"></label>
+    <label>新しい帰院予定<input type="datetime-local" name="due" value="${toLocalInput(Math.max(o.dueAt,round15(Date.now()+3600000)))}"></label>
+    <label>理由・状況<span class="req">必須</span><input name="reason" placeholder="${resolveSearch?'例：家族と合流、〇〇にいることを確認':'例：家族から電話、渋滞のため'}"></label>${memoChips(resolveSearch?'found':'extend','reason')}
     <label>職員<span class="req">必須</span><input name="staff" list="nurseList"></label>`,
   [{label:'やめる'},{label:'変更を保存',cls:'pri',onClick:async f=>{
     const due=fromLocalInput(val(f,'due')),reason=val(f,'reason'),staff=val(f,'staff');
@@ -776,7 +893,7 @@ function dlgExtend(o,resolveSearch){
     if(due<=Date.now()){toast('新しい帰院予定は現在より後にしてください');return false;}
     if(resolveSearch){o.status='out';addLog(o,'所在確認・捜索終了：'+reason,staff);}
     addLog(o,`帰院予定を変更 ${fmt(o.dueAt)} → ${fmt(due)}（${reason}）`,staff);
-    o.dueAt=due;rememberNurse(staff);await saveOuting(o);lastSig='';tick();
+    o.dueAt=due;rememberNurse(staff);rememberMemo(resolveSearch?'found':'extend',reason);await saveOuting(o);lastSig='';tick();
   }}]);
 }
 
@@ -848,14 +965,19 @@ async function dlgPhoto(o){const u=await getPhotoURL(o.id);if(!u)return;openDlg(
 
 /* ---------- 新規登録 ---------- */
 const nf=$('#newForm');
+function buildTagOptions(){
+  const sel=$('#tagSelect');const cur=sel.value;const pid=nf.dataset.planId;
+  const av=tags.filter(t=>t.status==='available'||(pid&&t.status==='reserved'&&t.outingId===pid));
+  sel.innerHTML=`<option value="">${isPlanForm()?'タグなし（出発時に選ぶ）':'タグなし'}</option>`+av.map(t=>`<option value="${esc(t.id)}">${esc(t.id)}${t.findName&&t.findName!==t.id?'（'+esc(t.findName)+'）':''}${t.status==='reserved'?'（この予定で予約中）':''}</option>`).join('');
+  if(av.some(t=>t.id===cur))sel.value=cur;
+  $('#tagHint').textContent=tags.length?`利用可能なタグ：${tags.filter(t=>t.status==='available').length}個（全${tags.length}個）`:'タグが未登録です。「タグ管理」で登録すると選べるようになります。';
+}
 function prepareNewForm(){
   if(!nf.elements.departAt.value)nf.elements.departAt.value=toLocalInput(Date.now());
-  const sel=$('#tagSelect');const cur=sel.value;const av=tags.filter(t=>t.status==='available');
-  sel.innerHTML='<option value="">タグなし</option>'+av.map(t=>`<option value="${esc(t.id)}">${esc(t.id)}${t.findName&&t.findName!==t.id?'（'+esc(t.findName)+'）':''}</option>`).join('');
-  if(av.some(t=>t.id===cur))sel.value=cur;
-  $('#tagHint').textContent=tags.length?`利用可能なタグ：${av.length}個（全${tags.length}個）`:'タグが未登録です。「タグ管理」で登録すると選べるようになります。';
+  buildTagOptions();
   updateConsent();renderPhotoPrev();renderPatientChips();updatePlanMode();attachNurseChips(nf);if(!nf.dataset.patientId)renderDestList(null);
 }
+enhanceTimes(nf);nf.addEventListener('reset',()=>setTimeout(()=>nf.querySelectorAll('input[type="datetime-local"]').forEach(i=>i._tpSync&&i._tpSync()),0));
 $('#wardRadios').innerHTML=WARDS.map(w=>`<label><input type="radio" name="ward" value="${w}">${w}</label>`).join('');
 function renderDestList(p){const own=p?(p.dests||[]):[];const all=[...outings].sort((a,b)=>b.departAt-a.departAt).map(o=>o.dest).filter(Boolean);
   $('#destList').innerHTML=[...new Set([...own,...all])].slice(0,25).map(d=>`<option value="${esc(d)}">`).join('');}
@@ -880,7 +1002,7 @@ function fillPatient(p){
   if(!f.departAt.value)f.departAt.value=toLocalInput(Date.now());
   updateConsent();
 }
-function clearPatientForm(){const keep=nf.elements.departAt.value;nf.reset();nf.elements.departAt.value=keep;delete nf.dataset.patientId;delete nf.dataset.planId;$('#pLoaded').hidden=true;$('#compBox').hidden=true;renderDestList(null);updateConsent();}
+function clearPatientForm(){const keep=nf.elements.departAt.value;const hadPlan=!!nf.dataset.planId;nf.reset();nf.elements.departAt.value=keep;delete nf.dataset.patientId;delete nf.dataset.planId;if(hadPlan){pendingPhoto=null;renderPhotoPrev();buildTagOptions();}$('#pLoaded').hidden=true;$('#compBox').hidden=true;renderDestList(null);updateConsent();}
 $('#pSearch').addEventListener('input',renderPatientChips);
 $('#pChips').addEventListener('click',e=>{const b=e.target.closest('[data-pt]');if(!b)return;const p=patients.find(x=>x.id===b.dataset.pt);if(!p)return;
   if(outings.some(o=>isActive(o)&&o.patientId===p.id)){toast(`${p.name} さんは現在外出中です。帰院登録を確認してください。`,4500);}
@@ -895,8 +1017,8 @@ async function upsertPatient(o,loadedId){
   await dbPut('patients',p);return p;
 }
 function isPlanForm(){const d=fromLocalInput(nf.elements.departAt.value);return !nf.dataset.planId&&d&&d>Date.now()+PLAN_MIN*60000;}
-function updatePlanMode(){const plan=isPlanForm();$('#fsClothes').hidden=plan;$('#fsTag').hidden=plan;
-  const n=$('#planNote');n.hidden=!plan;n.innerHTML=plan?'<b>出発日時が先なので「予定」として登録します。</b>服装の撮影とタグは、当日「予定」タブの「出発手続き」で入れます。':'';
+function updatePlanMode(){const plan=isPlanForm();$('#fsClothes').hidden=false;$('#fsTag').hidden=false;{const o0=$('#tagSelect').options[0];if(o0&&o0.value==='')o0.textContent=plan?'タグなし（出発時に選ぶ）':'タグなし';}
+  const n=$('#planNote');n.hidden=!plan;n.innerHTML=plan?'<b>出発日時が先なので「予定」として登録します。</b>服装の写真をここで撮っておけば、当日は「予定」タブの<b>「出発（GO）」</b>でタグを選んで看護師名を入れるだけです。<b>タグは「タグなし」のままでOK（出発時に選びます）</b>。ここでタグを選ぶと「予約中」になり、出発日まで他の患者には使えません。<b>帰院予定は、出発が早まっても遅れても変わりません。</b>':'';
   $('#submitBtn').textContent=plan?'予定として登録':'この内容で出発を登録';
   const lb=nf.querySelector('input[name=departNurse]').closest('label');lb.firstChild.textContent=plan?'登録した看護師':'確認した看護師';}
 nf.elements.departAt.addEventListener('input',updatePlanMode);nf.elements.departAt.addEventListener('change',updatePlanMode);
@@ -916,7 +1038,7 @@ nf.elements.name.addEventListener('input',updateConsent);nf.elements.pid.addEven
 $('#tagSelect').addEventListener('change',updateConsent);
 $$('input[name="alone"]').forEach(r=>r.addEventListener('change',()=>{$('#compBox').hidden=nf.elements.alone.value==='1';}));
 $('#dueQuick').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const base=fromLocalInput(nf.elements.departAt.value)||Date.now();const d=new Date(base);
-  if(b.dataset.h)d.setTime(base+b.dataset.h*3600000);if(b.dataset.d)d.setDate(d.getDate()+Number(b.dataset.d));nf.elements.dueAt.value=toLocalInput(d.getTime());});
+  if(b.dataset.h)d.setTime(base+b.dataset.h*3600000);if(b.dataset.d)d.setDate(d.getDate()+Number(b.dataset.d));nf.elements.dueAt.value=toLocalInput(round15(d.getTime()));});
 
 async function compress(src){
   const img=await new Promise((res,rej)=>{if(src instanceof HTMLCanvasElement)return res(src);const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(src);});
@@ -943,7 +1065,7 @@ function showFormErrors(errs){
   nf.querySelectorAll('.invalid').forEach(el=>el.classList.remove('invalid'));
   const box=$('#formErr');
   if(!errs.length){box.hidden=true;return;}
-  errs.forEach(e=>e.el&&e.el.classList.add('invalid'));
+  errs.forEach(e=>e.el&&(e.el._tp||e.el).classList.add('invalid'));
   box.innerHTML='<b>まだ登録できません。次の項目を確認してください。</b><ul>'+errs.map(e=>'<li>'+esc(e.msg)+'</li>').join('')+'</ul>';
   box.hidden=false;
   toast(`まだ登録できません：赤枠の${errs.length}項目を確認してください（一覧は登録ボタンの上）`,6000);
@@ -958,7 +1080,7 @@ $('#submitBtn').addEventListener('click',async()=>{if(submitting)return;submitti
 async function registerOuting(){
   const f=nf;
   const name=val(f,'name'),departAt=fromLocalInput(val(f,'departAt')),dueAt=fromLocalInput(val(f,'dueAt')),nurse=val(f,'departNurse');
-  const plan=isPlanForm();const alone=f.elements.alone.value==='1',tagId=plan?'':val(f,'tagId');
+  const plan=isPlanForm();const alone=f.elements.alone.value==='1',tagId=val(f,'tagId');
   const E=[];const el=n=>f.elements[n];
   if(!name)E.push({msg:'患者氏名を入力してください',el:el('name')});
   if(!val(f,'pid'))E.push({msg:'患者IDを入力してください（同姓同名の取り違えを防ぐため必須です）',el:el('pid')});
@@ -976,15 +1098,17 @@ async function registerOuting(){
   const now=Date.now();
   const o={id:uid(),name,pid:val(f,'pid'),ward:f.elements.ward.value,room:val(f,'room'),adm:val(f,'adm'),kind:f.elements.kind.value,departAt,dueAt,dueAtOriginal:dueAt,
     dest:val(f,'dest'),selfTel:val(f,'selfTel'),famName:val(f,'famName'),famRel:val(f,'famRel'),famTel:val(f,'famTel'),alone,compName:alone?'':val(f,'compName'),compRel:alone?'':val(f,'compRel'),compTel:alone?'':val(f,'compTel'),
-    clothes:plan?'':val(f,'clothes'),tagId,consent:!!tagId,consentDate:tagId?(cs.st==='ok'?cs.date:val(f,'consentDate')):'',departNurse:nurse,note:val(f,'note'),status:plan?'planned':'out',createdAt:now,hasPhoto:!plan&&!!pendingPhoto,log:[]};
-  const planSrc=nf.dataset.planId&&outings.find(x=>x.id===nf.dataset.planId);if(planSrc)o.log=[...(planSrc.log||[])];
+    clothes:val(f,'clothes'),tagId,consent:!!tagId,consentDate:tagId?(cs.st==='ok'?cs.date:val(f,'consentDate')):'',departNurse:nurse,note:val(f,'note'),status:plan?'planned':'out',createdAt:now,hasPhoto:!!pendingPhoto,log:[]};
+  const planSrc=nf.dataset.planId&&outings.find(x=>x.id===nf.dataset.planId);if(planSrc){o.log=[...(planSrc.log||[])];o.departAtPlanned=planSrc.departAt;o.planNurse=planSrc.departNurse;}
   const pt=await upsertPatient(o,nf.dataset.patientId);o.patientId=pt.id;
   if(tagId&&cs.st==='none'){pt.consentDate=o.consentDate;pt.consentLog=[...(pt.consentLog||[]),{at:Date.now(),text:`同意書取得日を ${ymd(o.consentDate)} に登録（外出登録時）`,by:nurse}];await dbPut('patients',pt);}
-  if(plan)addLog(o,`${o.kind}の予定を登録（出発予定 ${fmt(departAt)}）`,nurse);else addLog(o,`${o.kind}に出発`+(tagId?`（タグ ${tagId} 貸出・同意書 ${ymd(o.consentDate)} 取得）`:'（タグなし）'),nurse);
-  if(!plan&&pendingPhoto)addLog(o,'服装写真を登録');
-  await saveOuting(o);if(!plan&&pendingPhoto)await dbPut('photos',pendingPhoto,o.id);
-  if(planSrc){await dbDel('outings',planSrc.id);outings=outings.filter(x=>x!==planSrc);}
-  if(tagId){const t=tags.find(x=>x.id===tagId);if(t){t.status='inuse';t.outingId=o.id;await saveTag(t);}}
+  if(plan)addLog(o,`${o.kind}の予定を登録（出発予定 ${fmt(departAt)}）`+(tagId?`（タグ ${tagId} を予約）`:''),nurse);else addLog(o,`${o.kind}に出発`+(tagId?`（タグ ${tagId} 貸出・同意書 ${ymd(o.consentDate)} 取得）`:'（タグなし）'),nurse);
+  if(pendingPhoto&&!(planSrc&&planSrc.hasPhoto))addLog(o,'服装写真を登録');
+  await saveOuting(o);if(pendingPhoto)await dbPut('photos',pendingPhoto,o.id);
+  if(planSrc){if(planSrc.tagId&&planSrc.tagId!==tagId){const t0=tags.find(x=>x.id===planSrc.tagId);if(t0&&t0.outingId===planSrc.id){t0.status='available';t0.outingId=null;await saveTag(t0);}}
+    if(planSrc.hasPhoto){await dbDel('photos',planSrc.id);dropPhotoURL(planSrc.id);}
+    await dbDel('outings',planSrc.id);outings=outings.filter(x=>x!==planSrc);}
+  if(tagId){const t=tags.find(x=>x.id===tagId);if(t){t.status=plan?'reserved':'inuse';t.outingId=o.id;await saveTag(t);}}
   outings.push(o);rememberNurse(nurse);
   f.reset();pendingPhoto=null;$('#compBox').hidden=true;f.elements.departAt.value='';delete nf.dataset.patientId;delete nf.dataset.planId;$('#pLoaded').hidden=true;$('#pSearch').value='';updateConsent();attachNurseChips(nf);
   toast(plan?`${name} さんの${o.kind}予定を登録しました（「予定」タブ）`:`${name} さんの${o.kind}を登録しました`);lastSig='';showTab(plan?'plan':'active');tick();
@@ -1103,7 +1227,7 @@ function dlgDetail(o){
   const fam=[o.famName,o.famRel?'（'+o.famRel+'）':'',o.famTel].filter(Boolean).join(' ');
   openDlg(`記録：${o.name}`,`<p style="margin:0 0 10px"><span class="lbl lbl-${s}">${stLabel(o,s)}</span>${hadSearch(o)?' <span class="f srch">捜索あり</span>':''}${lm>0?` <span class="f late">${lm}分遅れ</span>`:''}</p>
    <dl class="info"><dt>病棟</dt><dd>${esc(wardText(o))}${o.pid?'（ID '+esc(o.pid)+'）':''}</dd><dt>入院形態</dt><dd>${esc(o.adm)}</dd><dt>区分</dt><dd>${esc(o.kind)}</dd>
-   <dt>出発</dt><dd>${fmt(o.departAt)}（${esc(o.departNurse)}）</dd><dt>帰院予定</dt><dd>${fmt(o.dueAt)}${o.dueAt!==o.dueAtOriginal?'（当初 '+fmt(o.dueAtOriginal)+'）':''}</dd>
+   <dt>出発</dt><dd>${fmt(o.departAt)}（${esc(o.departNurse)}）${o.departAtPlanned&&o.status!=='planned'?'<span class="sub">　予定 '+fmt(o.departAtPlanned)+'</span>':''}</dd><dt>帰院予定</dt><dd>${fmt(o.dueAt)}${o.dueAt!==o.dueAtOriginal?'（当初 '+fmt(o.dueAtOriginal)+'）':''}</dd>
    <dt>帰院</dt><dd>${o.returnedAt?fmt(o.returnedAt)+'（'+esc(o.returnNurse)+'）':(o.status==='planned'?'出発前（予定）':'まだ帰院していません')}</dd>
    <dt>行き先</dt><dd>${esc(o.dest)||'—'}</dd><dt>同行</dt><dd>${comp}</dd><dt>本人携帯</dt><dd>${esc(o.selfTel)||'—'}</dd><dt>家族</dt><dd>${esc(fam)||'—'}</dd>
    <dt>服装</dt><dd>${esc(o.clothes)||'—'}</dd><dt>服装写真</dt><dd>${photoText(o)}</dd>
@@ -1185,8 +1309,8 @@ $('#ptTable').addEventListener('click',async e=>{
 function renderTags(){
   $('#tTable').innerHTML=`<tr><th>タグ番号</th><th>「探す」での名前</th><th>状態</th><th>貸出先</th><th>シリアル</th><th>電池交換日</th><th></th></tr>`+
   (tags.map(t=>{const o=t.outingId&&outings.find(x=>x.id===t.outingId);
-    const st=t.status==='inuse'?`<b>${TAG_ST.inuse}</b>`:`<select data-tst="${esc(t.id)}">${['available','missing','maint'].map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TAG_ST[k]}</option>`).join('')}</select>`;
-    return `<tr><td><b>${esc(t.id)}</b></td><td><input data-tname="${esc(t.id)}" value="${esc(t.findName)}" style="width:150px"></td><td>${st}</td><td>${o?esc(o.name)+'（'+fmt(o.dueAt)+'まで）':''}</td><td><input data-tser="${esc(t.id)}" value="${esc(t.serial)}" style="width:150px"></td><td><input type="date" data-tbat="${esc(t.id)}" value="${esc(t.battery)}"></td><td>${t.status==='inuse'?'':`<button class="btn sm" data-tdel="${esc(t.id)}">削除</button>`}</td></tr>`;}).join('')||'<tr><td colspan="7">タグが登録されていません</td></tr>');
+    const st=(t.status==='inuse'||t.status==='reserved')?`<b>${TAG_ST[t.status]}</b>`:`<select data-tst="${esc(t.id)}">${['available','missing','maint'].map(k=>`<option value="${k}" ${t.status===k?'selected':''}>${TAG_ST[k]}</option>`).join('')}</select>`;
+    return `<tr><td><b>${esc(t.id)}</b></td><td><input data-tname="${esc(t.id)}" value="${esc(t.findName)}" style="width:150px"></td><td>${st}</td><td>${o?esc(o.name)+(t.status==='reserved'?'（'+fmt(o.departAt)+' 出発予定）':'（'+fmt(o.dueAt)+'まで）'):''}</td><td><input data-tser="${esc(t.id)}" value="${esc(t.serial)}" style="width:150px"></td><td><input type="date" data-tbat="${esc(t.id)}" value="${esc(t.battery)}"></td><td>${(t.status==='inuse'||t.status==='reserved')?'':`<button class="btn sm" data-tdel="${esc(t.id)}">削除</button>`}</td></tr>`;}).join('')||'<tr><td colspan="7">タグが登録されていません</td></tr>');
 }
 async function addTag(id,findName,serial,battery){id=id.trim();if(!id)return false;if(tags.some(t=>t.id===id))return false;const t={id,findName:(findName||id).trim(),serial:serial||'',battery:battery||'',status:'available',outingId:null};tags.push(t);tags.sort(tagSort);await saveTag(t);return true;}
 $('#tAdd').addEventListener('click',async()=>{const ok=await addTag($('#tNewId').value,$('#tNewName').value,$('#tNewSerial').value,$('#tNewBat').value);if(!ok){toast('タグ番号が空か、既に登録されています');return;}['#tNewId','#tNewName','#tNewSerial','#tNewBat'].forEach(s=>$(s).value='');renderTags();toast('タグを追加しました');});
@@ -1228,7 +1352,9 @@ $('#demoIn').addEventListener('click',async()=>{
     {name:'(デモ) 鈴木 次郎',ward:'本3',room:'310',famName:'鈴木 京子',famRel:'母',famTel:'090-0000-0003',adm:'任意入院',kind:'外泊',departAt:now-20*3600000,dueAt:now+26*3600000,dest:'実家（明石市）',alone:false,compName:'鈴木 京子',compRel:'母',compTel:'090-0000-0003',clothes:'緑のパーカー、ジーンズ'}];
   for(const d of demo){const t=tags.find(x=>x.status==='available');const o={id:uid(),pid:'',room:'',note:'',compName:'',compRel:'',compTel:'',selfTel:'',famName:'',famRel:'',famTel:'',...d,dueAtOriginal:d.dueAt,tagId:t?t.id:'',consent:!!t,departNurse:'(デモ) 看護師A',status:'out',createdAt:now,hasPhoto:false,demo:true,log:[]};
     addLog(o,`${o.kind}に出発（デモ）`,'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;if(t){t.status='inuse';t.outingId=o.id;await saveTag(t);}await saveOuting(o);outings.push(o);}
-  lastSig='';showTab('active');tick();toast('デモデータを入れました');});
+  {const t=null;const dep=now+90*M;const o={id:uid(),name:'(デモ) 田中 四郎',pid:'D004',ward:'西1',room:'105',adm:'任意入院',kind:'外泊',departAt:dep,dueAt:dep+26*3600000,dueAtOriginal:dep+26*3600000,dest:'自宅（明石市）',alone:false,compName:'田中 京子',compRel:'妻',compTel:'090-0000-0004',selfTel:'',famName:'田中 京子',famRel:'妻',famTel:'090-0000-0004',clothes:'',note:'',tagId:t?t.id:'',consent:!!t,departNurse:'(デモ) 看護師A',status:'planned',createdAt:now,hasPhoto:false,demo:true,log:[]};
+   addLog(o,`外泊の予定を登録（出発予定 ${fmt(dep)}）`+(t?`（タグ ${t.id} を予約）`:''),'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;{const pp=patients.find(x=>x.id===o.patientId);if(pp&&!pp.consentDate){pp.consentDate=toDateInput(now-30*86400000);await dbPut('patients',pp);}}if(t){t.status='reserved';t.outingId=o.id;await saveTag(t);}await saveOuting(o);outings.push(o);}
+  lastSig='';showTab('active');tick();toast('デモデータを入れました（予定タブにも1件）');});
 $('#demoOut').addEventListener('click',async()=>{for(const o of outings.filter(x=>x.demo)){await dbDel('outings',o.id);await dbDel('photos',o.id);dropPhotoURL(o.id);const t=tags.find(x=>x.outingId===o.id);if(t){t.status='available';t.outingId=null;await saveTag(t);}}
   for(const p of patients.filter(x=>x.demo))await dbDel('patients',p.id);patients=patients.filter(x=>!x.demo);
   outings=outings.filter(x=>!x.demo);lastSig='';tick();toast('デモデータを消しました');});
@@ -1286,7 +1412,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.0.0';
+const APP_VERSION='1.2.0';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
