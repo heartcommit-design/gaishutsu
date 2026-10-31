@@ -150,6 +150,10 @@ table.xl tbody tr:hover td{background:#eaf2fc}
 table.xl td.wide{white-space:normal;min-width:180px;max-width:280px}
 table.xl .rn{position:sticky;left:0;z-index:1;background:#eef2f6!important;color:var(--sub);text-align:right;min-width:36px}
 table.xl th.rn{z-index:3}
+table.xl .nm0{position:sticky;left:0;z-index:1;box-shadow:2px 0 0 #c7d0db;min-width:9em}
+table.xl th.nm0{z-index:3}
+table.xl td.nm0 b{font-size:15px}
+table#ptTable td{vertical-align:middle}
 table.xl td.nm{position:sticky;left:36px;z-index:1;font-weight:700;box-shadow:2px 0 0 #c7d0db}
 table.xl tr.r-overdue td.st,table.xl tr.r-search td.st{background:#ffe3e3}
 table.xl .lbl{font-size:13px;padding:1px 8px}
@@ -182,6 +186,10 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
 .tp .tp-fine{white-space:nowrap}
 .tp input{flex:1 1 220px}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+fieldset{min-width:0}
+.chips.onerow{max-width:100%;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px;scroll-snap-type:x proximity}
+.chips.onerow .chip{flex:0 0 auto;white-space:nowrap;scroll-snap-align:start}
+.chips.onerow .chip small{display:block}
 .chip{font-size:16px;padding:8px 14px;border-radius:22px;border:1px solid #aab4c1;background:#fff;cursor:pointer;color:var(--ink);text-align:left;line-height:1.3}
 .chip small{display:block;color:var(--sub);font-size:13px}
 .chip.out{border-color:var(--warn);background:var(--warnbg)}
@@ -309,8 +317,8 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
   <h2>外出・外泊の登録</h2>
   <form id="newForm" class="panel" autocomplete="off" novalidate>
     <fieldset><legend>患者</legend>
-      <label>前回の情報を呼び出す<input id="pSearch" placeholder="氏名・IDの一部を入力（空欄なら最近外出した患者を表示）"></label>
-      <div class="chips" id="pChips"></div>
+      <label>前回の情報を呼び出す<input id="pSearch" placeholder="氏名・ふりがな・IDの一部を入力（空欄なら最近外出した10人を表示）"></label>
+      <div class="chips onerow" id="pChips"></div><div class="hint" id="pChipsMore" style="margin:2px 0 0"></div>
       <div class="loaded" id="pLoaded" hidden></div>
       <div class="grid" style="margin-top:12px">
         <label>患者氏名<span class="req">必須</span><input name="name" required></label>
@@ -456,10 +464,10 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
 <section id="sec-patients">
   <h2>患者台帳</h2>
   <div class="toolbar"><input id="ptQ" placeholder="氏名・ふりがな・IDで絞り込み" style="min-width:200px"><span class="sp"></span>
-    <button type="button" class="btn pri" id="ptCsvBtn">CSVから取り込む</button><button type="button" class="btn" id="ptCsvTpl">ひな形CSV</button>
+    <span class="hint" id="ptCount"></span><button type="button" class="btn pri" id="ptCsvBtn">CSVから取り込む</button><button type="button" class="btn" id="ptCsvTpl">ひな形CSV</button>
     <input type="file" id="ptCsvFile" accept=".csv,text/csv,text/plain" hidden></div>
   <p class="hint" style="margin-top:0">外出を一度登録した患者は自動でここに入り、次回は「＋ 新規登録」で呼び出せます。院内の患者一覧（Excel）を<b>CSVで保存して取り込む</b>こともできます（氏名・ふりがな・ID・性別・年齢・家族氏名・続柄・連絡先など）。同じ患者IDの人は上書きされます。退院した患者は削除してください。</p>
-  <div class="tablewrap"><table id="ptTable"></table></div>
+  <div class="xlwrap"><table class="xl" id="ptTable"></table></div>
 </section>
 
 <!-- タグ管理 -->
@@ -1063,7 +1071,8 @@ function renderDestList(p){const own=p?(p.dests||[]):[];const all=[...outings].s
   $('#destList').innerHTML=[...new Set([...own,...all])].slice(0,25).map(d=>`<option value="${esc(d)}">`).join('');}
 function renderPatientChips(){
   const q=$('#pSearch').value.trim();
-  let list=patients.filter(p=>matchQ(p,q)).sort((a,b)=>(b.lastOutAt||0)-(a.lastOutAt||0)).slice(0,12);
+  const all=patients.filter(p=>matchQ(p,q)).sort((a,b)=>(b.lastOutAt||0)-(a.lastOutAt||0));const lim=q?30:10;let list=all.slice(0,lim);
+  $('#pChipsMore').textContent=all.length>lim?`ほか ${all.length-lim}人は、氏名・ふりがな・IDで探してください`:(list.length>3?'← 横にずらすと続きが見られます':'');
   $('#pChips').innerHTML=list.map(p=>{const out=outings.some(o=>isActive(o)&&o.patientId===p.id);
     return `<button type="button" class="chip${out?' out':''}" data-pt="${p.id}"><b>${esc(p.name)}</b>${p.pid?' <span class="sub">ID '+esc(p.pid)+'</span>':''}${sexAge(p)?' <span class="sub">'+esc(sexAge(p))+'</span>':''}<small>${esc(wardText(p)||'病棟未設定')}・前回 ${p.lastOutAt?fmt(p.lastOutAt):'—'}${out?'・<b>外出中</b>':''}</small></button>`;}).join('')
     ||(q?'<span class="hint">該当する患者がいません。下の欄に入力すると、登録時に台帳へ追加されます。</span>':(patients.length?'':'<span class="hint">まだ台帳に患者がいません。初回は下の欄に入力してください。</span>'));
@@ -1357,9 +1366,13 @@ $('#calWard').addEventListener('change',renderCalendar);
 function renderPatients(){
   const q=$('#ptQ').value.trim();
   const list=patients.filter(p=>matchQ(p,q)).sort((a,b)=>(b.lastOutAt||0)-(a.lastOutAt||0));
-  $('#ptTable').innerHTML=`<tr><th>氏名</th><th>ID</th><th>性別・年齢</th><th>病棟</th><th>入院形態</th><th>本人携帯</th><th>家族</th><th>同意書</th><th>前回の行き先</th><th>外出回数</th><th>最終外出</th><th></th></tr>`+
-   (list.map(p=>`<tr><td><b>${esc(p.name)}</b>${p.kana?'<br><span class="sub">'+esc(p.kana)+'</span>':''}</td><td>${esc(p.pid)}</td><td style="white-space:nowrap">${esc(sexAge(p))}</td><td>${esc(wardText(p))}</td><td>${esc(p.adm)}</td><td>${esc(p.selfTel)}</td><td>${esc([p.famName,p.famRel?'（'+p.famRel+'）':'',p.famTel].filter(Boolean).join(' '))}</td><td style="white-space:nowrap">${(()=>{const c=consentState(p);return c.st==='ok'?'<span class="lbl lbl-ok">取得 '+ymd(c.date)+'</span>':c.st==='withdrawn'?'<span class="lbl lbl-overdue">撤回 '+ymd(c.date)+'</span>':'<span class="lbl lbl-returned">未登録</span>';})()} <button class="btn sm" data-ptcon="${p.id}">同意書</button></td><td>${esc(p.lastDest)}</td><td>${p.count||0}</td><td>${fmt(p.lastOutAt)}</td>
-     <td style="white-space:nowrap"><button class="btn sm pri" data-ptgo="${p.id}">この患者で登録</button> <button class="btn sm" data-pthist="${p.id}">過去の記録</button> <button class="btn sm" data-ptdel="${p.id}">削除</button></td></tr>`).join('')||'<tr><td colspan="12">台帳に患者がいません</td></tr>');
+  const cons=p=>{const c=consentState(p);return c.st==='ok'?'<span class="lbl lbl-ok">取得 '+ymd(c.date)+'</span>':c.st==='withdrawn'?'<span class="lbl lbl-overdue">撤回 '+ymd(c.date)+'</span>':'<span class="lbl lbl-returned">未登録</span>';};
+  $('#ptTable').innerHTML=`<thead><tr><th class="nm0">氏名（ふりがな）</th><th>操作</th><th>患者ID</th><th>性別・年齢</th><th>病棟・部屋</th><th>同意書</th><th>入院形態</th><th>家族</th><th>家族の連絡先</th><th>本人の携帯</th><th>前回の行き先</th><th>外出回数</th><th>最終外出</th></tr></thead><tbody>`+
+   (list.map(p=>`<tr><td class="nm0"><b>${esc(p.name)}</b>${p.kana?'<br><span class="sub">'+esc(p.kana)+'</span>':''}</td>
+     <td><button class="btn sm pri" data-ptgo="${p.id}">この患者で登録</button> <button class="btn sm" data-pthist="${p.id}">過去の記録</button> <button class="btn sm" data-ptdel="${p.id}">削除</button></td>
+     <td>${esc(p.pid)}</td><td>${esc(sexAge(p))}</td><td>${esc(wardText(p))}</td><td>${cons(p)} <button class="btn sm" data-ptcon="${p.id}">同意書</button></td><td>${esc(p.adm||'')}</td>
+     <td>${esc([p.famName,p.famRel?'（'+p.famRel+'）':''].filter(Boolean).join(''))}</td><td>${esc(p.famTel||'')}</td><td>${esc(p.selfTel||'')}</td><td>${esc(p.lastDest||'')}</td><td style="text-align:right">${p.count||0}</td><td>${p.lastOutAt?fmt(p.lastOutAt):''}</td></tr>`).join('')||'<tr><td class="nm0" colspan="13">台帳に患者がいません</td></tr>')+'</tbody>';
+  $('#ptCount').textContent=`${list.length}人${q?'（絞り込み中）':''}`;
 }
 $('#ptQ').addEventListener('input',renderPatients);
 
@@ -1564,7 +1577,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.6.0';
+const APP_VERSION='1.7.0';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
