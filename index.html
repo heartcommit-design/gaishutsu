@@ -124,6 +124,8 @@ video{width:100%;border-radius:8px;background:#000}
 .rc label{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:16px;margin:0}
 .rc input[type=checkbox]{width:22px;height:22px;margin:0}
 .rc input[type=text],.rc input:not([type]){min-width:0;width:100%}
+.loglist li.lx{color:#8a94a3}
+.lxbtn{margin-left:6px;padding:2px 10px;font-size:13px}
 .nchips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
 .mchips .nchip{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nchip{font-size:14px;padding:5px 11px;border-radius:16px;border:1px solid #aab4c1;background:#f4f7fb;cursor:pointer;color:var(--ink)}
@@ -341,15 +343,15 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
         <button type="button" class="btn sm" data-d="2">2日後 同時刻</button>
       </div>
       <div class="grid" style="margin-top:10px">
-        <label>行き先<input name="dest" list="destList" placeholder="例：自宅、〇〇駅周辺の買い物"></label>
+        <label>行き先<input name="dest" list="destList" placeholder="例：自宅、〇〇駅周辺の買い物"><span class="nchips mchips pchips" data-preset="dest" data-field="dest"></span></label>
       </div>
-      <p class="hint">前回の情報を呼び出すと、前回の行き先が入ります。入力欄を押すと過去の行き先から選べます。</p>
+      <p class="hint">よく使う行き先はボタンで入ります（「設定」で登録）。前回の情報を呼び出すと前回の行き先が入り、入力欄を押すと過去の行き先からも選べます。</p>
       <div class="grid" style="margin-top:10px">
         <label>本人の携帯番号<input name="selfTel" inputmode="tel"></label>
       </div>
       <div class="grid" style="margin-top:10px">
         <label>家族の氏名<input name="famName"></label>
-        <label>家族の続柄<input name="famRel" placeholder="例：母、夫"></label>
+        <label>家族の続柄<input name="famRel" placeholder="例：母、夫"><span class="nchips mchips pchips" data-preset="rel" data-field="famRel"></span></label>
         <label>家族の携帯番号<input name="famTel" inputmode="tel"></label>
       </div>
       <div style="margin-top:10px">
@@ -361,7 +363,7 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
       </div>
       <div class="grid" id="compBox" style="margin-top:10px" hidden>
         <label>同行者氏名<span class="req">必須</span><input name="compName"></label>
-        <label>続柄<input name="compRel" placeholder="例：母、夫"></label>
+        <label>続柄<input name="compRel" placeholder="例：母、夫"><span class="nchips mchips pchips" data-preset="rel" data-field="compRel"></span></label>
         <label>同行者の連絡先<input name="compTel" inputmode="tel"></label>
       </div>
     </fieldset>
@@ -499,6 +501,15 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
     <div class="quick"><button class="btn pri" type="button" id="sSave">設定を保存</button><button class="btn" type="button" id="sTest">アラーム音を試す</button></div>
   </div>
   <div class="panel" style="margin-top:14px">
+    <h2>よく使う選択肢</h2>
+    <p class="hint" style="margin-top:0">登録画面の入力欄の下にボタンで出ます。1行に1つずつ書いて「選択肢を保存」を押してください（例：病院そばのイオン）。</p>
+    <div class="grid">
+      <label>よく使う行き先<textarea id="sDest" rows="6"></textarea></label>
+      <label>よく使う続柄<textarea id="sRel" rows="6"></textarea></label>
+    </div>
+    <div class="quick"><button class="btn pri" type="button" id="sPresetSave">選択肢を保存</button></div>
+  </div>
+  <div class="panel" style="margin-top:14px">
     <h2>看護師名の一覧</h2>
     <p class="hint" style="margin-top:0">一度入力した名前は自動で覚え、入力欄の下にボタンで出ます（よく使う順に8人まで）。間違えて覚えた名前は×で消せます。</p>
     <div class="mgr" id="nurseMgr"></div>
@@ -538,8 +549,8 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
 
 <datalist id="nurseList"></datalist>
 <datalist id="destList"></datalist>
-<dialog id="dlg"><div class="dlgin"><h3 id="dlgTitle"></h3><form id="dlgForm" onsubmit="return false"><div id="dlgBody"></div><div class="dlgActions" id="dlgActions"></div></form></div></dialog>
-<dialog id="cdlg"><div class="dlgin"><h3 id="cdlgMsg" style="font-size:18px;line-height:1.6"></h3><div class="dlgActions"><button type="button" class="btn" id="cdlgNo">やめる</button><button type="button" class="btn bad" id="cdlgYes">はい</button></div></div></dialog>
+<dialog id="dlg"><div class="dlgin"><h3 id="dlgTitle" tabindex="-1" autofocus style="outline:none"></h3><form id="dlgForm" onsubmit="return false"><div id="dlgBody"></div><div class="dlgActions" id="dlgActions"></div></form></div></dialog>
+<dialog id="cdlg"><div class="dlgin"><h3 id="cdlgMsg" style="font-size:18px;line-height:1.6;white-space:pre-line"></h3><div class="dlgActions"><button type="button" class="btn" id="cdlgNo">やめる</button><button type="button" class="btn bad" id="cdlgYes">はい</button></div></div></dialog>
 <div id="printArea"></div>
 <div id="toast"></div>
 
@@ -627,7 +638,7 @@ const half=t=>String(t||'').replace(/[０-９Ａ-Ｚａ-ｚ]/g,c=>String.fromCha
 function ageOf(x){if(!x)return '';if(x.birth){const b=new Date(x.birth+'T00:00:00');if(!isNaN(b)){const n=new Date();let a=n.getFullYear()-b.getFullYear();if(n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate()))a--;return a>=0&&a<130?String(a):'';}}return x.age?String(x.age):'';}
 const sexAge=x=>[x.sex||'',ageOf(x)?ageOf(x)+'歳':''].filter(Boolean).join(' ');
 const matchQ=(p,q)=>{q=hira(q).replace(/\s/g,'');if(!q)return true;return hira((p.name||'')+(p.kana||'')+(p.pid||'')).replace(/\s/g,'').includes(q);};
-let settings={preMin:15,realertMin:10,volume:0.7,nurses:[],escalateMin:10,idleMin:30,backupHour:17,mask:false,gaps:[],quietFrom:17,quietTo:8,printHours:[8,17],memos:{}};
+let settings={preMin:15,realertMin:10,volume:0.7,nurses:[],escalateMin:10,idleMin:30,backupHour:17,mask:false,gaps:[],quietFrom:17,quietTo:8,printHours:[8,17],memos:{},destPresets:['自宅','実家','病院周辺の散歩','近くのコンビニ'],relPresets:['母','父','妻','夫','姉','兄','妹','弟','娘','息子','その他の親族','施設職員']};
 const photoURL={};
 let pendingPhoto=null;
 const saveOuting=o=>dbPut('outings',o);
@@ -652,10 +663,10 @@ function dropPhotoURL(id){if(photoURL[id]){URL.revokeObjectURL(photoURL[id]);del
 function rememberMemo(key,t){t=(t||'').trim();if(!t)return;if(!settings.memos)settings.memos={};settings.memos[key]=[t,...(settings.memos[key]||[]).filter(x=>x!==t)].slice(0,30);saveSettings();}
 function memoChips(key,field){const l=((settings.memos||{})[key]||[]).slice(0,10);if(!l.length)return '';
   return `<div class="nchips mchips">${l.map(t=>`<button type="button" class="nchip" data-memo="${esc(t)}" data-field="${field}" title="${esc(t)}">${esc(t)}</button>`).join('')}</div><p class="hint" style="margin:0 0 4px">前に入れた内容から選べます（選んだ後に書き足しても構いません）</p>`;}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-memo]');if(!b)return;e.preventDefault();const f=b.closest('form');const inp=f&&f.elements[b.dataset.field];if(!inp)return;inp.value=b.dataset.memo;inp.dispatchEvent(new Event('input',{bubbles:true}));inp.focus();});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-memo]');if(!b)return;e.preventDefault();const f=b.closest('form');const inp=f&&f.elements[b.dataset.field];if(!inp)return;inp.value=b.dataset.memo;inp.dispatchEvent(new Event('input',{bubbles:true}));inp.classList.remove('invalid');});
 function rememberNurse(n){n=(n||'').trim();if(!n)return;settings.nurses=[n,...settings.nurses.filter(x=>x!==n)].slice(0,40);saveSettings();renderNurseList();}
 function renderNurseList(){$('#nurseList').innerHTML=settings.nurses.map(n=>`<option value="${esc(n)}">`).join('');}
-function addLog(o,text,by){o.log=o.log||[];o.log.push({at:Date.now(),text,by:by||''});}
+function addLog(o,text,by,extra){o.log=o.log||[];o.log.push({at:Date.now(),text,by:by||'',...(extra||{})});}
 
 /* ---------- 判定 ---------- */
 function stateOf(o,now){
@@ -874,6 +885,7 @@ function openDlg(title,body,buttons){
     el.addEventListener('click',async()=>{const r=bt.onClick?await bt.onClick($('#dlgForm')):true;if(r!==false)$('#dlg').close();});a.appendChild(el);});
   attachNurseChips($('#dlgBody'));enhanceTimes($('#dlgBody'));
   if(!$('#dlg').open)$('#dlg').showModal();
+  try{$('#dlgTitle').focus({preventScroll:true});}catch(e){}
 }
 const val=(f,n)=>(f.elements[n]?.value||'').trim();
 /* 看護師名：覚えた名前をボタンで出す */
@@ -943,16 +955,19 @@ function dlgExtend(o,resolveSearch){
   }}]);
 }
 
-function logHTML(o){return `<ul class="loglist">${(o.log||[]).map(l=>`<li><time>${fmt(l.at)}</time>${esc(l.text)}${l.by?` <span class="sub">［${esc(l.by)}］</span>`:''}</li>`).join('')||'<li>記録なし</li>'}</ul>`;}
+function logHTML(o,editable){return `<ul class="loglist">${(o.log||[]).map((l,i)=>l.x?`<li class="lx"><time>${fmt(l.at)}</time><s>${esc(l.text)}</s> <span class="sub">（${fmt(l.x)} 取消${l.xby?'・'+esc(l.xby):''}）</span></li>`:`<li><time>${fmt(l.at)}</time>${esc(l.text)}${l.by?` <span class="sub">［${esc(l.by)}］</span>`:''}${editable&&l.m?` <button type="button" class="btn sm lxbtn" data-logx="${i}">取消</button>`:''}</li>`).join('')||'<li>記録なし</li>'}</ul>`;}
 function dlgLog(o,readOnly){
   const quick=['本人へ電話','同行者・家族へ電話','「探す」で位置を確認','病院周辺を捜索','警察へ連絡','家族へ状況報告'];
-  openDlg(`対応記録：${o.name}${o.tagId?'（'+o.tagId+'）':''}`, logHTML(o)+(readOnly?'':`
+  openDlg(`対応記録：${o.name}${o.tagId?'（'+o.tagId+'）':''}`, logHTML(o,!readOnly)+(readOnly?'':`
     <label>職員<input name="staff" list="nurseList"></label>
     <div class="quick" id="logQuick">${quick.map(q=>`<button type="button" class="btn sm" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
     <label style="margin-top:10px">内容（確認した位置、電話の結果など）<textarea name="memo"></textarea></label>
-    <p class="hint">ボタンを押すと、下の内容欄と合わせて記録されます。</p>`),
-  readOnly?[{label:'閉じる'}]:[{label:'閉じる'},{label:'内容を記録',cls:'pri',onClick:async f=>{const m=val(f,'memo');if(!m){toast('内容を入力してください');return false;}addLog(o,m,val(f,'staff'));rememberNurse(val(f,'staff'));await saveOuting(o);dlgLog(o);return false;}}]);
-  if(!readOnly)$$('#logQuick [data-q]').forEach(b=>b.addEventListener('click',async()=>{const f=$('#dlgForm');const m=val(f,'memo');addLog(o,b.dataset.q+(m?'：'+m:''),val(f,'staff'));rememberNurse(val(f,'staff'));await saveOuting(o);const st=val(f,'staff');dlgLog(o);$('#dlgForm').elements.staff.value=st;}));
+    <p class="hint">ボタンを押すと、下の内容欄と合わせて記録されます。間違えた記録は、上の一覧の「取消」で取り消せます（取り消し線で残ります）。</p>`),
+  readOnly?[{label:'閉じる'}]:[{label:'閉じる'},{label:'内容を記録',cls:'pri',onClick:async f=>{const m=val(f,'memo');if(!m){toast('内容を入力してください');return false;}addLog(o,m,val(f,'staff'),{m:1});rememberNurse(val(f,'staff'));await saveOuting(o);dlgLog(o);return false;}}]);
+  if(!readOnly)$$('#dlgBody [data-logx]').forEach(b=>b.addEventListener('click',async()=>{const l=o.log[+b.dataset.logx];if(!l)return;const st=val($('#dlgForm'),'staff');
+    if(!await askConfirm(`この記録を取り消しますか？\n「${l.text}」（${fmt(l.at)}）\n記録は消えずに、取り消し線を付けて残ります。`,'取り消す'))return;
+    l.x=Date.now();l.xby=st||'';await saveOuting(o);dlgLog(o);$('#dlgForm').elements.staff.value=st;toast('記録を取り消しました');}));
+  if(!readOnly)$$('#logQuick [data-q]').forEach(b=>b.addEventListener('click',async()=>{const f=$('#dlgForm');const m=val(f,'memo');addLog(o,b.dataset.q+(m?'：'+m:''),val(f,'staff'),{m:1});rememberNurse(val(f,'staff'));await saveOuting(o);const st=val(f,'staff');dlgLog(o);$('#dlgForm').elements.staff.value=st;}));
 }
 
 function dlgEdit(o){
@@ -1036,7 +1051,8 @@ function buildTagOptions(){
   if(av.some(t=>t.id===cur))sel.value=cur;
   $('#tagHint').textContent=tags.length?`利用可能なタグ：${tags.filter(t=>t.status==='available').length}個（全${tags.length}個）`:'タグが未登録です。「タグ管理」で登録すると選べるようになります。';
 }
-function prepareNewForm(){
+function renderPresetChips(){$$('.pchips').forEach(c=>{const l=(c.dataset.preset==='dest'?settings.destPresets:settings.relPresets)||[];c.innerHTML=l.map(t=>`<button type="button" class="nchip" data-memo="${esc(t)}" data-field="${c.dataset.field}">${esc(t)}</button>`).join('');c.hidden=!l.length;});}
+function prepareNewForm(){renderPresetChips();
   if(!nf.elements.departAt.value)nf.elements.departAt.value=toLocalInput(Date.now());
   buildTagOptions();
   updateConsent();renderPhotoPrev();renderPatientChips();updatePlanMode();attachNurseChips(nf);if(!nf.dataset.patientId)renderDestList(null);
@@ -1182,7 +1198,7 @@ async function registerOuting(){
 
 /* ---------- 日別一覧 ---------- */
 function lateMin(o){if(o.status==='cancelled')return '';const end=o.returnedAt||(o.status==='planned'?null:(o.status!=='returned'?Date.now():null));if(!end)return '';const m=Math.floor((end-o.dueAtOriginal)/60000);return m>0?m:0;}
-const lastLog=o=>{const l=(o.log||[]).slice(-1)[0];return l?`${fmt(l.at)} ${l.text}`:'';};
+const lastLog=o=>{const l=(o.log||[]).filter(x=>!x.x).slice(-1)[0];return l?`${fmt(l.at)} ${l.text}`:'';};
 // 一覧とCSVで共通の列（登録した項目をすべて）
 const COLS=[
  ['患者氏名',o=>o.name],['ふりがな',o=>o.kana||''],['性別',o=>o.sex||''],['年齢',o=>o.age||''],['状態',o=>stLabel(o,stateOf(o,Date.now()))],['患者ID',o=>o.pid],['病棟',o=>o.ward],['部屋',o=>o.room],['入院形態',o=>o.adm],['区分',o=>o.kind],
@@ -1255,7 +1271,7 @@ function printHistory(){
 $('#hPrint').addEventListener('click',printHistory);
 $('#csvBtn').addEventListener('click',()=>{
   const rows=filteredHistory(),[,,a,b]=hRange();
-  const data=rows.map(o=>COLS.map(([,f])=>f(o)).concat([(o.log||[]).map(l=>`${fmtFull(l.at)} ${l.text}${l.by?'['+l.by+']':''}`).join(' / ')]));
+  const data=rows.map(o=>COLS.map(([,f])=>f(o)).concat([(o.log||[]).map(l=>`${fmtFull(l.at)} ${l.text}${l.by?'['+l.by+']':''}${l.x?'（'+fmtFull(l.x)+' 取消）':''}`).join(' / ')]));
   const csv='﻿'+[COLS.map(c=>c[0]).concat(['経過（全件）']),...data].map(r=>r.map(v=>{v=String(v??'');return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',')).join('\r\n');
   download(`外出外泊一覧_${a}${a===b?'':'_'+b}.csv`,new Blob([csv],{type:'text/csv'}));
 });
@@ -1285,7 +1301,7 @@ $('#stPrint').addEventListener('click',()=>{const d=statsData();
   try{window.print();}catch(e){done();toast('この画面からは印刷できません。ファイルをSafariやChromeで直接開いて印刷してください。',6000);}});
 
 /* ---------- 詳細・カレンダー ---------- */
-const hadSearch=o=>(o.log||[]).some(l=>l.text.startsWith('捜索開始'));
+const hadSearch=o=>(o.log||[]).some(l=>!l.x&&l.text.startsWith('捜索開始'));
 function photoText(o){if(o.hasPhoto)return 'あり（帰院登録で自動削除されます）';if(o.photoDeletedAt)return `帰院時に削除済み（${fmt(o.photoDeletedAt)}）`;return 'なし';}
 function dlgDetail(o){
   const now=Date.now(),s=stateOf(o,now),lm=lateMin(o);
@@ -1459,13 +1475,14 @@ $('#tTable').addEventListener('change',async e=>{const el=e.target;let t;
 $('#tTable').addEventListener('click',async e=>{const b=e.target.closest('[data-tdel]');if(!b)return;if(!await askConfirm(`タグ ${b.dataset.tdel} を削除しますか？`))return;await dbDel('tags',b.dataset.tdel);tags=tags.filter(t=>t.id!==b.dataset.tdel);renderTags();});
 
 /* ---------- 設定・データ ---------- */
-function renderSettings(){updateSwInfo();$('#sPre').value=settings.preMin;$('#sRe').value=settings.realertMin;$('#sVol').value=settings.volume;$('#sEsc').value=settings.escalateMin;$('#sIdle').value=settings.idleMin;$('#sBk').value=settings.backupHour;$('#sQf').value=settings.quietFrom;$('#sQt').value=settings.quietTo;$('#sPh').value=(settings.printHours||[]).join(',');$('#sMask').checked=!!settings.mask;renderNurseMgr();
+function renderSettings(){updateSwInfo();$('#sDest').value=(settings.destPresets||[]).join('\n');$('#sRel').value=(settings.relPresets||[]).join('\n');$('#sPre').value=settings.preMin;$('#sRe').value=settings.realertMin;$('#sVol').value=settings.volume;$('#sEsc').value=settings.escalateMin;$('#sIdle').value=settings.idleMin;$('#sBk').value=settings.backupHour;$('#sQf').value=settings.quietFrom;$('#sQt').value=settings.quietTo;$('#sPh').value=(settings.printHours||[]).join(',');$('#sMask').checked=!!settings.mask;renderNurseMgr();
   $('#gapList').innerHTML=(settings.gaps||[]).map(g=>`<li><time>${fmt(g.from)} 〜 ${fmt(g.to)}</time>約${dur(g.to-g.from)}${g.closed?'（アプリを閉じていた）':''}</li>`).join('')||'<li>記録はありません</li>';
   if(navigator.storage&&navigator.storage.persisted)navigator.storage.persisted().then(p=>{$('#storageInfo').textContent=p?'この端末では保存データが自動削除されにくい設定になっています。':'注意：ブラウザの容量整理でデータが消える可能性があります。CSVを定期的に出力してください。';});}
 $('#sSave').addEventListener('click',async()=>{settings.preMin=Math.max(0,+$('#sPre').value||0);settings.realertMin=Math.max(1,+$('#sRe').value||10);settings.volume=Math.max(0,Math.min(1,+$('#sVol').value));settings.escalateMin=Math.max(1,+$('#sEsc').value||10);settings.idleMin=Math.max(0,+$('#sIdle').value||0);settings.backupHour=Math.min(23,Math.max(0,+$('#sBk').value||0));settings.quietFrom=Math.min(23,Math.max(0,+$('#sQf').value||0));settings.quietTo=Math.min(23,Math.max(0,+$('#sQt').value||0));settings.printHours=$('#sPh').value.split(/[,、 ]+/).map(Number).filter(n=>n>=0&&n<=23);settings.mask=$('#sMask').checked;await saveSettings();lastSig='';tick();toast('設定を保存しました');});
 function renderNurseMgr(){$('#nurseMgr').innerHTML=settings.nurses.map((n,i)=>`<span>${esc(n)}<button type="button" data-ndel="${i}" aria-label="${esc(n)}を消す">×</button></span>`).join('')||'<span style="border:none;padding:0;background:none" class="hint">まだ登録されていません</span>';}
 $('#nurseMgr').addEventListener('click',async e=>{const b=e.target.closest('[data-ndel]');if(!b)return;settings.nurses.splice(+b.dataset.ndel,1);await saveSettings();renderNurseList();renderNurseMgr();});
 $('#nurseAddBtn').addEventListener('click',()=>{const n=$('#nurseAdd').value.trim();if(!n)return;rememberNurse(n);$('#nurseAdd').value='';renderNurseMgr();});
+$('#sPresetSave').addEventListener('click',async()=>{const L=v=>[...new Set(v.split(/\r?\n/).map(x=>x.trim()).filter(Boolean))].slice(0,30);settings.destPresets=L($('#sDest').value);settings.relPresets=L($('#sRel').value);await saveSettings();renderPresetChips();renderSettings();toast('よく使う選択肢を保存しました');});
 $('#sTest').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(!alarm())toast('音を出せません。端末の音量・ミュートを確認してください');},150);});
 async function doBackup(){const data={app:'gaishutsu_kanri',version:1,exportedAt:Date.now(),settings,tags,patients,outings:outings.map(o=>({...o,hasPhoto:false}))};download(`外出管理バックアップ_${toDateInput(Date.now())}.json`,new Blob([JSON.stringify(data)],{type:'application/json'}));settings.lastBackupDay=toDateInput(Date.now());await saveSettings();$('#bkBar').hidden=true;toast('バックアップを保存しました（ダウンロード先を確認してください）',5000);}
 $('#bkOut').addEventListener('click',doBackup);
@@ -1547,7 +1564,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.5.0';
+const APP_VERSION='1.6.0';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
