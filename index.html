@@ -548,7 +548,7 @@ fieldset{min-width:0}
   <div class="panel" style="margin-top:14px">
     <h2>デモ</h2>
     <div class="quick" style="margin-top:0"><button class="btn" type="button" id="demoIn">デモデータを入れる</button><button class="btn" type="button" id="demoOut">デモデータを消す</button></div>
-    <p class="hint">説明・練習用。デモの患者は「(デモ)」付きで登録され、通常の記録とは別に削除できます。</p>
+    <p class="hint">説明・練習用。押すと<b>東1病棟の入院患者50人（架空）</b>が患者台帳に入り、外出・外泊中3人と予定1件がある状態から始まります（本番でCSVから病棟の患者を取り込んだ状態を想定）。デモの患者は「(デモ)」付きで、「デモデータを消す」でまとめて削除できます。</p>
   </div>
   <div class="panel" style="margin-top:14px">
     <h2>データ</h2>
@@ -1537,16 +1537,45 @@ $('#bkIn').addEventListener('change',async e=>{const f=e.target.files[0];e.targe
 $('#wipe').addEventListener('click',async()=>{if(!await askConfirm('すべての記録・患者台帳・タグ・写真を削除します。元に戻せません。'))return;if(!await askConfirm('本当に削除しますか？'))return;
   await dbClear('outings');await dbClear('tags');await dbClear('photos');await dbClear('patients');Object.keys(photoURL).forEach(dropPhotoURL);outings=[];tags=[];patients=[];lastSig='';tick();toast('削除しました');});
 $('#demoIn').addEventListener('click',async()=>{
+  if(patients.some(x=>x.demo)||outings.some(x=>x.demo)){toast('デモデータはすでに入っています。入れ直す時は先に「デモデータを消す」を押してください。',5000);return;}
   for(let i=1;i<=5;i++)await addTag('T-'+pad(i));
-  const now=Date.now(),M=60000;
-  const demo=[{name:'(デモ) 山田 一郎',ward:'東2',room:'203',famName:'山田 和子',famRel:'姉',famTel:'090-0000-0011',adm:'任意入院',kind:'外出',departAt:now-150*M,dueAt:now-18*M,dest:'〇〇駅周辺で買い物',alone:true,clothes:'紺のダウン、灰色のズボン、白いスニーカー',selfTel:'090-0000-0001'},
-    {name:'(デモ) 佐藤 花子',ward:'西3',room:'305',famName:'佐藤 正',famRel:'夫',famTel:'090-0000-0002',adm:'医療保護入院',kind:'外出',departAt:now-110*M,dueAt:now+9*M,dest:'自宅',alone:false,compName:'佐藤 正',compRel:'夫',compTel:'090-0000-0002',clothes:'ベージュのコート、黒いバッグ'},
-    {name:'(デモ) 鈴木 次郎',ward:'本3',room:'310',famName:'鈴木 京子',famRel:'母',famTel:'090-0000-0003',adm:'任意入院',kind:'外泊',departAt:now-20*3600000,dueAt:now+26*3600000,dest:'実家（明石市）',alone:false,compName:'鈴木 京子',compRel:'母',compTel:'090-0000-0003',clothes:'緑のパーカー、ジーンズ'}];
-  for(const d of demo){const t=tags.find(x=>x.status==='available');const o={id:uid(),pid:'',room:'',note:'',compName:'',compRel:'',compTel:'',selfTel:'',famName:'',famRel:'',famTel:'',...d,dueAtOriginal:d.dueAt,tagId:t?t.id:'',consent:!!t,departNurse:'(デモ) 看護師A',status:'out',createdAt:now,hasPhoto:false,demo:true,log:[]};
-    addLog(o,`${o.kind}に出発（デモ）`,'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;if(t){t.status='inuse';t.outingId=o.id;await saveTag(t);}await saveOuting(o);outings.push(o);}
-  {const t=null;const dep=now+90*M;const o={id:uid(),name:'(デモ) 田中 四郎',pid:'D004',ward:'西1',room:'105',adm:'任意入院',kind:'外泊',departAt:dep,dueAt:dep+26*3600000,dueAtOriginal:dep+26*3600000,dest:'自宅（明石市）',alone:false,compName:'田中 京子',compRel:'妻',compTel:'090-0000-0004',selfTel:'',famName:'田中 京子',famRel:'妻',famTel:'090-0000-0004',clothes:'',note:'',tagId:t?t.id:'',consent:!!t,departNurse:'(デモ) 看護師A',status:'planned',createdAt:now,hasPhoto:false,demo:true,log:[]};
-   addLog(o,`外泊の予定を登録（出発予定 ${fmt(dep)}）`+(t?`（タグ ${t.id} を予約）`:''),'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;{const pp=patients.find(x=>x.id===o.patientId);if(pp&&!pp.consentDate){pp.consentDate=toDateInput(now-30*86400000);await dbPut('patients',pp);}}if(t){t.status='reserved';t.outingId=o.id;await saveTag(t);}await saveOuting(o);outings.push(o);}
-  lastSig='';showTab('active');tick();toast('デモデータを入れました（予定タブにも1件）');});
+  const now=Date.now(),M=60000,H=3600000,D=86400000;
+  // 東1病棟の入院患者50人（すべて架空）
+  let seed=20261109;const rnd=()=>{seed=(seed*1103515245+12345)%2147483648;return seed/2147483648;};const pick=a=>a[Math.floor(rnd()*a.length)];
+  const SN=[['山田','やまだ'],['佐藤','さとう'],['鈴木','すずき'],['田中','たなか'],['高橋','たかはし'],['伊藤','いとう'],['渡辺','わたなべ'],['中村','なかむら'],['小林','こばやし'],['加藤','かとう'],['吉田','よしだ'],['山本','やまもと'],['松本','まつもと'],['井上','いのうえ'],['木村','きむら'],['林','はやし'],['清水','しみず'],['森','もり'],['池田','いけだ'],['橋本','はしもと'],['石川','いしかわ'],['前田','まえだ'],['藤田','ふじた'],['岡田','おかだ'],['後藤','ごとう']];
+  const GM=[['一郎','いちろう'],['健太','けんた'],['大輔','だいすけ'],['誠','まこと'],['浩二','こうじ'],['隆','たかし'],['修','おさむ'],['和也','かずや'],['直樹','なおき'],['正人','まさと'],['勇','いさむ'],['亮','りょう'],['翔太','しょうた']];
+  const GF=[['花子','はなこ'],['恵子','けいこ'],['由美','ゆみ'],['真理子','まりこ'],['幸子','さちこ'],['陽子','ようこ'],['美咲','みさき'],['裕子','ゆうこ'],['智子','ともこ'],['京子','きょうこ'],['直美','なおみ'],['彩','あや']];
+  const GMo=[['健一','けんいち'],['正夫','まさお'],['茂','しげる'],['博','ひろし'],['清','きよし'],['和夫','かずお']],GFo=[['和子','かずこ'],['節子','せつこ'],['洋子','ようこ'],['弘子','ひろこ'],['久美子','くみこ']];
+  const DEST=['自宅','実家','病院周辺の散歩','近くのコンビニ','〇〇駅周辺で買い物'];
+  const list=[];let mRoom=0,fRoom=0;
+  for(let k=0;k<50;k++){
+    const sn=SN[k%SN.length];const male=rnd()<0.5;let g=male?pick(GM):pick(GF);while(list.some(x=>x.name===`(デモ) ${sn[0]} ${g[0]}`))g=male?pick(GM):pick(GF);const age=20+Math.floor(rnd()*66);
+    // 続柄は年齢に合わせる（若い人は親、中年は配偶者・親・きょうだい、高齢は配偶者・子）
+    const opts=age<40?['母','父','母','姉','兄']:age<60?[male?'妻':'夫','母','姉','兄','弟']:[male?'妻':'夫','娘','息子','娘'];
+    const rel=pick(opts);const rf=['母','妻','姉','妹','娘'].includes(rel);
+    const fam=(rel==='母'||rel==='父'||rel==='妻'||rel==='夫')&&age>=45?(rf?pick(GFo):pick(GMo)):(rf?pick(GF):pick(GM));
+    const famSur=(rel==='姉'||rel==='娘')&&rnd()<0.4?pick(SN)[0]:sn[0];
+    const room=male?String(101+Math.floor(mRoom++/4)):String(115+Math.floor(fRoom++/4));
+    const p={id:uid(),pid:'D'+(1001+k),name:`(デモ) ${sn[0]} ${g[0]}`,kana:`${sn[1]} ${g[1]}`,sex:male?'男':'女',age:String(age),ward:'東1',room,
+      adm:rnd()<0.7?'任意入院':'医療保護入院',selfTel:rnd()<0.4?`090-0000-${2000+k}`:'',famName:`${famSur} ${fam[0]}`,famRel:rel,famTel:`090-0000-${1000+k}`,
+      consentDate:rnd()<0.75?toDateInput(now-(10+Math.floor(rnd()*120))*D):'',consentWithdrawn:'',consentLog:[],dests:[],count:0,lastOutAt:0,lastDest:'',lastComp:{alone:true},createdAt:now,demo:true};
+    if(k<14){p.count=1+Math.floor(rnd()*4);p.lastOutAt=now-(1+k)*D/2;p.lastDest=pick(DEST);p.dests=[p.lastDest];}
+    if(p.consentDate)p.consentLog=[{at:now-30*D,text:'同意書取得日を '+ymd(p.consentDate)+' に登録',by:'(デモ) 看護師A'}];
+    list.push(p);await dbPut('patients',p);patients.push(p);}
+  // 外出・外泊中3人と予定1人（台帳の患者から）
+  const P=n=>list[n];const famOf=p=>({famName:p.famName,famRel:p.famRel,famTel:p.famTel,selfTel:p.selfTel});
+  const demo=[{pt:P(0),kind:'外出',departAt:now-150*M,dueAt:now-18*M,dest:'〇〇駅周辺で買い物',alone:true,clothes:'紺のダウン、灰色のズボン、白いスニーカー'},
+    {pt:P(1),kind:'外出',departAt:now-110*M,dueAt:now+9*M,dest:'自宅',alone:false,comp:true,clothes:'ベージュのコート、黒いバッグ'},
+    {pt:P(2),kind:'外泊',departAt:now-20*H,dueAt:now+26*H,dest:'実家（明石市）',alone:false,comp:true,clothes:'緑のパーカー、ジーンズ'}];
+  for(const d of demo){const p=d.pt;p.consentDate=p.consentDate||toDateInput(now-40*D);const t=tags.find(x=>x.status==='available');
+    const o={id:uid(),name:p.name,pid:p.pid,kana:p.kana,sex:p.sex,age:p.age,ward:p.ward,room:p.room,adm:p.adm,kind:d.kind,departAt:d.departAt,dueAt:d.dueAt,dueAtOriginal:d.dueAt,dest:d.dest,alone:!d.comp,
+      compName:d.comp?p.famName:'',compRel:d.comp?p.famRel:'',compTel:d.comp?p.famTel:'',...famOf(p),clothes:d.clothes,note:'',tagId:t?t.id:'',consent:!!t,consentDate:t?p.consentDate:'',departNurse:'(デモ) 看護師A',status:'out',createdAt:now,hasPhoto:false,demo:true,log:[]};
+    addLog(o,`${o.kind}に出発（デモ）`+(t?`（タグ ${t.id} 貸出）`:''),'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;if(t){t.status='inuse';t.outingId=o.id;await saveTag(t);}await saveOuting(o);outings.push(o);}
+  {const p=P(3);p.consentDate=p.consentDate||toDateInput(now-30*D);const dep=now+90*M;const keep={lastOutAt:p.lastOutAt,count:p.count};
+   const o={id:uid(),name:p.name,pid:p.pid,kana:p.kana,sex:p.sex,age:p.age,ward:p.ward,room:p.room,adm:p.adm,kind:'外泊',departAt:dep,dueAt:dep+26*H,dueAtOriginal:dep+26*H,dest:'自宅（明石市）',alone:false,compName:p.famName,compRel:p.famRel,compTel:p.famTel,...famOf(p),clothes:'',note:'',tagId:'',consent:false,departNurse:'(デモ) 看護師A',status:'planned',createdAt:now,hasPhoto:false,demo:true,log:[]};
+   addLog(o,`外泊の予定を登録（出発予定 ${fmt(dep)}）`,'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;Object.assign(p,keep);await saveOuting(o);outings.push(o);}
+  for(const p of list)await dbPut('patients',p);
+  lastSig='';showTab('active');tick();toast('デモデータを入れました（東1病棟の入院患者50人・外出中3人・予定1件）',5000);});
 $('#demoOut').addEventListener('click',async()=>{for(const o of outings.filter(x=>x.demo)){await dbDel('outings',o.id);await dbDel('photos',o.id);dropPhotoURL(o.id);const t=tags.find(x=>x.outingId===o.id);if(t){t.status='available';t.outingId=null;await saveTag(t);}}
   for(const p of patients.filter(x=>x.demo))await dbDel('patients',p.id);patients=patients.filter(x=>!x.demo);
   outings=outings.filter(x=>!x.demo);lastSig='';tick();toast('デモデータを消しました');});
@@ -1604,7 +1633,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.8.0';
+const APP_VERSION='1.9.0';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
