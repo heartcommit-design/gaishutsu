@@ -62,6 +62,18 @@ h2{font-size:20px;margin:4px 0 12px}
 .statebox{text-align:right;min-width:150px}
 .lbl{display:inline-block;font-weight:800;padding:3px 10px;border-radius:6px;font-size:15px}
 .lbl-ok{background:#dcefe4;color:var(--ok)}.lbl-soon{background:#ffe08a;color:#6b4500}.lbl-overdue{background:var(--bad);color:#fff}.lbl-search{background:var(--srch);color:#fff}    .lbl-planned{background:#e3e9f6;color:#2b4a85}.lbl-returned{background:#e3e7ec;color:#4a5563}
+.crow{display:grid;grid-template-columns:84px minmax(150px,1fr) 215px 175px auto;align-items:center;gap:8px 16px;padding:10px 14px}
+.crow .acts{justify-content:flex-end}
+.crow .who{flex:1 1 200px;min-width:0}
+.crow .who .name{font-size:21px}
+.crow .times{display:flex;flex-direction:column;font-size:15px;color:var(--sub);line-height:1.5}
+.crow .times b{color:var(--ink);font-variant-numeric:tabular-nums}
+.crow .statebox{text-align:right;min-width:150px}
+.crow .count{font-size:22px;white-space:nowrap}
+.crow .acts{display:flex;gap:6px;flex-wrap:nowrap}
+.tagbadge.sm{font-size:20px;min-width:74px;padding:4px 8px}
+.tagbadge.sm.none{font-size:13px;padding:8px 6px}
+#activeList{display:flex;flex-direction:column;gap:10px}
 .count{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
 .st-overdue .count{color:var(--bad)}.st-search .count{color:var(--srch)}
 .body{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
@@ -206,6 +218,10 @@ fieldset{min-width:0}
 
 /* ---------- スマホ（幅600px以下） ---------- */
 @media (max-width:600px){
+ .crow{display:flex;flex-wrap:wrap}
+ .crow .acts{justify-content:flex-start}
+ .crow .statebox{text-align:left;min-width:0}
+ .crow .who .name{font-size:18px}
  header{gap:6px 8px;padding:6px 12px}
  header h1{font-size:16px;min-width:0;flex:1 1 auto}
  #clock{font-size:20px;order:1}
@@ -231,6 +247,7 @@ fieldset{min-width:0}
  #toast{bottom:16px;font-size:14px}
  dialog{max-width:calc(100vw - 16px)}
 }
+@media (min-width:601px) and (max-width:900px){.crow{grid-template-columns:84px minmax(120px,1fr) 205px 200px;}.crow .acts{grid-column:1/-1}}
 @media print{
  body.pm-history>*:not(#printArea){display:none!important}
  body.pm-history #printArea{display:block!important}
@@ -299,7 +316,7 @@ fieldset{min-width:0}
 <section id="sec-active" class="active">
   <div class="printhead" id="printHead"></div>
   <div class="toolbar">
-    <h2 style="margin:0">外出・外泊中の患者</h2><span class="sp"></span>
+    <h2 style="margin:0">外出・外泊中の患者</h2><span class="hint" style="margin:0">連絡先・行き先・服装は「詳細」で表示（2分で自動で閉じます）</span><span class="sp"></span>
     <button class="btn" type="button" id="printBtn">一覧を印刷（写真なし）</button>
   </div>
   <div class="cards" id="activeList"></div>
@@ -733,7 +750,9 @@ function showTab(name){$$('nav button').forEach(b=>b.classList.toggle('active',b
 $$('nav button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
 
 /* ---------- 目隠し表示 ---------- */
-const revealUntil={};
+const revealUntil={};const openUntil={};let printFull=false;
+const OPEN_ALL=location.hash==='#detail';
+const isOpen=o=>OPEN_ALL||printFull||openUntil[o.id]>Date.now();
 function maskName(n){return String(n||'').trim().split(/[\s　]+/).map(x=>x?x[0]+'○'.repeat(Math.max(0,x.length-1)):'').join(' ');}
 function isMasked(o){return !!settings.mask&&!(revealUntil[o.id]>Date.now());}
 function shownName(o){return isMasked(o)?maskName(o.name):o.name;}
@@ -750,7 +769,15 @@ async function renderActive(){
   if(!list.length){box.innerHTML='<div class="empty">現在、外出・外泊中の患者はいません。<br>「＋ 新規登録」から登録してください。出発前の予定は「予定」タブにあります。</div>';return;}
   const urls={};for(const o of list){if(o.hasPhoto&&!isMasked(o))urls[o.id]=await getPhotoURL(o.id);}
   box.innerHTML=list.map(o=>{
-    const s=stateOf(o,now);const mk=isMasked(o);const tg=o.tagId?`<div class="tagbadge">${esc(o.tagId)}</div>`:'<div class="tagbadge none">タグなし</div>';
+    const s=stateOf(o,now);const mk=isMasked(o);
+    if(!isOpen(o)){const alert=s==='overdue'||s==='search';
+      return `<article class="card crow st-${s}" data-id="${o.id}">
+      ${o.tagId?`<div class="tagbadge sm">${esc(o.tagId)}</div>`:'<div class="tagbadge sm none">タグなし</div>'}
+      <div class="who"><div class="name">${esc(shownName(o))}</div><div class="sub">${esc([(o.pid&&!mk)?'ID '+o.pid:'',o.ward,o.kind].filter(Boolean).join('・'))}</div></div>
+      <div class="times"><span>出発 <b>${fmt(o.departAt)}</b></span><span>帰院予定 <b>${fmt(o.dueAt)}</b></span></div>
+      <div class="statebox"><span class="lbl lbl-${s}">${stLabel(o,s)}</span><div class="count" data-count="${o.id}">${countText(o,now)}</div></div>
+      <div class="acts"><button class="btn ok" data-act="return">帰院した</button>${alert?'<button class="btn bad" data-act="open">対応・詳細</button>':'<button class="btn" data-act="open">詳細</button>'}</div></article>`;}
+    const tg=o.tagId?`<div class="tagbadge">${esc(o.tagId)}</div>`:'<div class="tagbadge none">タグなし</div>';
     const tagName=o.tagId?(tags.find(t=>t.id===o.tagId)?.findName||o.tagId):'';
     const comp=o.alone?'単独':(mk?'同行あり':`${esc(o.compName)}${o.compRel?'（'+esc(o.compRel)+'）':''}`);
     const tel=[o.selfTel?'本人 '+esc(o.selfTel):'',(!o.alone&&o.compTel)?'同行者 '+esc(o.compTel):'',o.famTel?'家族'+(o.famRel?'（'+esc(o.famRel)+'）':'')+' '+esc(o.famTel):''].filter(Boolean).join('／')||'—';
@@ -778,14 +805,14 @@ async function renderActive(){
       <dt>帰院予定</dt><dd>${fmt(o.dueAt)}${o.dueAt!==o.dueAtOriginal?' <span class="sub">（当初 '+fmt(o.dueAtOriginal)+'）</span>':''}</dd>
       <dt>行き先</dt><dd>${esc(o.dest)||'—'}</dd><dt>同行</dt><dd>${comp}</dd><dt>連絡先</dt><dd>${telShown}</dd>
       <dt>服装</dt><dd>${mk?'（「表示」で確認）':(esc(o.clothes)||'—')}</dd>${o.note&&!mk?`<dt>備考</dt><dd>${esc(o.note)}</dd>`:''}</dl></div>
-      ${guide}<div class="actions">${acts.join('')}</div></article>`;
+      ${guide}<div class="actions">${acts.join('')}${printFull?'':'<button class="btn" data-act="close">詳細を閉じる</button>'}</div></article>`;
   }).join('');
 }
 $('#activeList').addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const id=b.closest('.card').dataset.id;const o=outings.find(x=>x.id===id);if(!o)return;
-  ({undo:dlgUndo,return:dlgReturn,ack:doAck,lost:dlgLost,found:o=>dlgExtend(o,true),log:dlgLog,extend:o=>dlgExtend(o,false),edit:dlgEdit,photo:dlgPhoto,reveal:o=>{revealUntil[o.id]=Date.now()+30000;lastSig='';tick();}})[b.dataset.act](o);
+  ({open:o=>{openUntil[o.id]=Date.now()+120000;lastSig='';tick();},close:o=>{delete openUntil[o.id];lastSig='';tick();},undo:dlgUndo,return:dlgReturn,ack:doAck,lost:dlgLost,found:o=>dlgExtend(o,true),log:dlgLog,extend:o=>dlgExtend(o,false),edit:dlgEdit,photo:dlgPhoto,reveal:o=>{revealUntil[o.id]=Date.now()+30000;lastSig='';tick();}})[b.dataset.act](o);
 });
-$('#printBtn').addEventListener('click',async()=>{showTab('active');$('#printHead').textContent='外出・外泊中一覧　印刷：'+fmtFull(Date.now());const now=Date.now();const h=(settings.printHours||[]).filter(x=>new Date(now).getHours()>=x).slice(-1)[0];if(h!==undefined){settings.prDoneKey=toDateInput(now)+':'+h;await saveSettings();$('#prBar').hidden=true;}try{window.print();}catch(e){toast('この画面からは印刷できません。SafariやChromeで直接開いてください。',6000);}});
+$('#printBtn').addEventListener('click',async()=>{showTab('active');$('#printHead').textContent='外出・外泊中一覧　印刷：'+fmtFull(Date.now());const now=Date.now();const h=(settings.printHours||[]).filter(x=>new Date(now).getHours()>=x).slice(-1)[0];if(h!==undefined){settings.prDoneKey=toDateInput(now)+':'+h;await saveSettings();$('#prBar').hidden=true;}printFull=true;await renderActive();try{window.print();}catch(e){toast('この画面からは印刷できません。SafariやChromeで直接開いてください。',6000);}printFull=false;lastSig='';tick();});
 
 /* ---------- 予定 ---------- */
 async function renderPlans(){
@@ -867,7 +894,7 @@ async function goPlan(o,nurse,tag,cdate){
   addLog(o,`${o.kind}に出発（予定 ${fmt(o.departAtPlanned)} → 実際 ${fmt(now)}／帰院予定 ${fmt(o.dueAt)} は変更なし）`+tagTxt,nurse);
   rememberNurse(nurse);
   if(pt){pt.lastOutAt=now;await dbPut('patients',pt);}
-  await saveOuting(o);renderPlans();lastSig='';showTab('active');tick();toast(`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）。間違えた時は30分以内ならカードの「GOの取消」で予定に戻せます`,7000);
+  await saveOuting(o);renderPlans();lastSig='';showTab('active');tick();toast(`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）。間違えた時は30分以内なら、その人の「詳細」→「GOの取消」で予定に戻せます`,7000);
 }
 function startDeparture(o,mode){
   const edit=mode==='edit';
@@ -1544,7 +1571,7 @@ async function tick(){
   const act=outings.filter(o=>isActive(o));
   // 時刻超過を記録に一度だけ残す
   for(const o of act){if(stateOf(o,now)==='overdue'&&o.overdueLoggedFor!==o.dueAt){o.overdueLoggedFor=o.dueAt;addLog(o,'帰院予定時刻を超過（アラーム）');saveOuting(o);}}
-  const sig=act.map(o=>o.id+':'+stateOf(o,now)+':'+(o.hasPhoto?1:0)+':'+(isMasked(o)?1:0)).join('|')+'#'+settings.preMin+':'+settings.mask;
+  const sig=act.map(o=>o.id+':'+stateOf(o,now)+':'+(o.hasPhoto?1:0)+':'+(isMasked(o)?1:0)+':'+(isOpen(o)?1:0)).join('|')+'#'+settings.preMin+':'+settings.mask;
   if(sig!==lastSig){lastSig=sig;await renderActive();}
   else{$$('[data-count]').forEach(el=>{const o=outings.find(x=>x.id===el.dataset.count);if(o)el.textContent=countText(o,now);});}
   const alerts=act.filter(o=>isAlert(o,now));
@@ -1577,7 +1604,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.7.0';
+const APP_VERSION='1.8.0';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
