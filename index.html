@@ -313,6 +313,9 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
       <div class="grid" style="margin-top:12px">
         <label>患者氏名<span class="req">必須</span><input name="name" required></label>
         <label>患者ID<span class="req">必須</span><input name="pid"></label>
+        <label>ふりがな<input name="kana" placeholder="例：やまだ いちろう"></label>
+        <label>性別<select name="sex"><option value=""></option><option>男</option><option>女</option><option>その他</option></select></label>
+        <label>年齢<input name="age" inputmode="numeric" placeholder="例：45"></label>
         <label>入院形態<select name="adm"><option>任意入院</option><option>医療保護入院</option><option>その他</option></select></label>
         <label>部屋番号<input name="room" inputmode="numeric"></label>
       </div>
@@ -450,8 +453,10 @@ table.xl .lbl{font-size:13px;padding:1px 8px}
 <!-- 患者台帳 -->
 <section id="sec-patients">
   <h2>患者台帳</h2>
-  <div class="toolbar"><input id="ptQ" placeholder="氏名・IDで絞り込み" style="min-width:200px"><span class="sp"></span></div>
-  <p class="hint" style="margin-top:0">外出を一度登録した患者は自動でここに入り、次回は「＋ 新規登録」で呼び出せます。退院した患者は削除してください。</p>
+  <div class="toolbar"><input id="ptQ" placeholder="氏名・ふりがな・IDで絞り込み" style="min-width:200px"><span class="sp"></span>
+    <button type="button" class="btn pri" id="ptCsvBtn">CSVから取り込む</button><button type="button" class="btn" id="ptCsvTpl">ひな形CSV</button>
+    <input type="file" id="ptCsvFile" accept=".csv,text/csv,text/plain" hidden></div>
+  <p class="hint" style="margin-top:0">外出を一度登録した患者は自動でここに入り、次回は「＋ 新規登録」で呼び出せます。院内の患者一覧（Excel）を<b>CSVで保存して取り込む</b>こともできます（氏名・ふりがな・ID・性別・年齢・家族氏名・続柄・連絡先など）。同じ患者IDの人は上書きされます。退院した患者は削除してください。</p>
   <div class="tablewrap"><table id="ptTable"></table></div>
 </section>
 
@@ -617,6 +622,11 @@ const dbClear=s=>tx(s,'readwrite',st=>st.clear());
 let outings=[],tags=[],patients=[];
 const WARDS=['東1','東2','東3','東4','西1','西2','西3','本3'];
 const wardText=o=>[o.ward,o.room?o.room+'号室':''].filter(Boolean).join(' ');
+const hira=t=>String(t||'').replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));
+const half=t=>String(t||'').replace(/[０-９Ａ-Ｚａ-ｚ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/　/g,' ').trim();
+function ageOf(x){if(!x)return '';if(x.birth){const b=new Date(x.birth+'T00:00:00');if(!isNaN(b)){const n=new Date();let a=n.getFullYear()-b.getFullYear();if(n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate()))a--;return a>=0&&a<130?String(a):'';}}return x.age?String(x.age):'';}
+const sexAge=x=>[x.sex||'',ageOf(x)?ageOf(x)+'歳':''].filter(Boolean).join(' ');
+const matchQ=(p,q)=>{q=hira(q).replace(/\s/g,'');if(!q)return true;return hira((p.name||'')+(p.kana||'')+(p.pid||'')).replace(/\s/g,'').includes(q);};
 let settings={preMin:15,realertMin:10,volume:0.7,nurses:[],escalateMin:10,idleMin:30,backupHour:17,mask:false,gaps:[],quietFrom:17,quietTo:8,printHours:[8,17],memos:{}};
 const photoURL={};
 let pendingPhoto=null;
@@ -742,7 +752,7 @@ async function renderActive(){
     if(o.status==='out'&&o.departAtPlanned&&now-o.departAt<30*60000)acts.push(`<button class="btn" data-act="undo">GOの取消（予定に戻す）</button>`);
     acts.push(`<button class="btn" data-act="log">対応記録</button>`,`<button class="btn" data-act="extend">帰院予定を変更</button>`,`<button class="btn" data-act="edit">内容を修正</button>`);
     return `<article class="card st-${s}" data-id="${o.id}">
-      <div class="head">${tg}<div class="who"><div class="name">${esc(shownName(o))}</div><div class="sub">${esc([wardText(o),o.adm,o.kind,(o.pid&&!mk)?'ID '+o.pid:''].filter(Boolean).join('・'))}</div></div>
+      <div class="head">${tg}<div class="who"><div class="name">${esc(shownName(o))}</div><div class="sub">${esc([wardText(o),o.adm,o.kind,sexAge(o),(o.pid&&!mk)?'ID '+o.pid:''].filter(Boolean).join('・'))}</div></div>
       <div class="statebox"><span class="lbl lbl-${s}">${stLabel(o,s)}</span><div class="count" data-count="${o.id}">${countText(o,now)}</div></div></div>
       <div class="body">${urls[o.id]?`<img class="thumb" src="${urls[o.id]}" alt="服装写真" data-act="photo">`:(mk&&o.hasPhoto?'<div class="nophoto">写真あり<br>（表示で確認）</div>':'<div class="nophoto">写真なし</div>')}
       <dl class="info"><dt>出発</dt><dd>${fmt(o.departAt)}（${esc(o.departNurse)}）</dd>
@@ -843,7 +853,7 @@ async function goPlan(o,nurse,tag,cdate){
 function startDeparture(o,mode){
   const edit=mode==='edit';
   showTab('new');clearPatientForm();const f=nf.elements;
-  f.name.value=o.name;f.pid.value=o.pid||'';f.room.value=o.room||'';f.adm.value=o.adm||'任意入院';setRadio('ward',o.ward);setRadio('kind',o.kind);
+  f.name.value=o.name;f.pid.value=o.pid||'';f.kana.value=o.kana||'';f.sex.value=o.sex||'';f.age.value=o.age||'';f.room.value=o.room||'';f.adm.value=o.adm||'任意入院';setRadio('ward',o.ward);setRadio('kind',o.kind);
   f.departAt.value=toLocalInput(edit?o.departAt:Date.now());f.dueAt.value=toLocalInput(o.dueAt);f.dest.value=o.dest||'';f.selfTel.value=o.selfTel||'';
   f.famName.value=o.famName||'';f.famRel.value=o.famRel||'';f.famTel.value=o.famTel||'';f.note.value=o.note||'';
   setRadio('alone',o.alone?'1':'0');$('#compBox').hidden=!!o.alone;f.compName.value=o.compName||'';f.compRel.value=o.compRel||'';f.compTel.value=o.compTel||'';
@@ -1037,15 +1047,15 @@ function renderDestList(p){const own=p?(p.dests||[]):[];const all=[...outings].s
   $('#destList').innerHTML=[...new Set([...own,...all])].slice(0,25).map(d=>`<option value="${esc(d)}">`).join('');}
 function renderPatientChips(){
   const q=$('#pSearch').value.trim();
-  let list=patients.filter(p=>!q||(p.name+' '+(p.pid||'')).includes(q)).sort((a,b)=>(b.lastOutAt||0)-(a.lastOutAt||0)).slice(0,12);
+  let list=patients.filter(p=>matchQ(p,q)).sort((a,b)=>(b.lastOutAt||0)-(a.lastOutAt||0)).slice(0,12);
   $('#pChips').innerHTML=list.map(p=>{const out=outings.some(o=>isActive(o)&&o.patientId===p.id);
-    return `<button type="button" class="chip${out?' out':''}" data-pt="${p.id}"><b>${esc(p.name)}</b>${p.pid?' <span class="sub">ID '+esc(p.pid)+'</span>':''}<small>${esc(wardText(p)||'病棟未設定')}・前回 ${p.lastOutAt?fmt(p.lastOutAt):'—'}${out?'・<b>外出中</b>':''}</small></button>`;}).join('')
+    return `<button type="button" class="chip${out?' out':''}" data-pt="${p.id}"><b>${esc(p.name)}</b>${p.pid?' <span class="sub">ID '+esc(p.pid)+'</span>':''}${sexAge(p)?' <span class="sub">'+esc(sexAge(p))+'</span>':''}<small>${esc(wardText(p)||'病棟未設定')}・前回 ${p.lastOutAt?fmt(p.lastOutAt):'—'}${out?'・<b>外出中</b>':''}</small></button>`;}).join('')
     ||(q?'<span class="hint">該当する患者がいません。下の欄に入力すると、登録時に台帳へ追加されます。</span>':(patients.length?'':'<span class="hint">まだ台帳に患者がいません。初回は下の欄に入力してください。</span>'));
 }
 function setRadio(name,v){const r=[...nf.querySelectorAll(`input[name="${name}"]`)].find(x=>x.value===v);if(r)r.checked=true;}
 function fillPatient(p){
   const f=nf.elements;
-  f.name.value=p.name||'';f.pid.value=p.pid||'';f.room.value=p.room||'';f.adm.value=p.adm||'任意入院';setRadio('ward',p.ward);
+  f.name.value=p.name||'';f.pid.value=p.pid||'';f.kana.value=p.kana||'';f.sex.value=p.sex||'';f.age.value=ageOf(p);f.room.value=p.room||'';f.adm.value=p.adm||'任意入院';setRadio('ward',p.ward);
   f.selfTel.value=p.selfTel||'';f.famName.value=p.famName||'';f.famRel.value=p.famRel||'';f.famTel.value=p.famTel||'';
   f.dest.value=p.lastDest||'';
   const c=p.lastComp||{alone:true};setRadio('alone',c.alone?'1':'0');$('#compBox').hidden=!!c.alone;
@@ -1064,6 +1074,7 @@ $('#pChips').addEventListener('click',e=>{const b=e.target.closest('[data-pt]');
 async function upsertPatient(o,loadedId){
   let p=o.pid?patients.find(x=>x.pid===o.pid):(patients.find(x=>x.id===loadedId&&x.name===o.name)||patients.find(x=>x.name===o.name&&!x.pid));
   if(!p){p={id:uid(),count:0,dests:[],createdAt:Date.now()};patients.push(p);}
+  if(o.kana)p.kana=o.kana;if(o.sex)p.sex=o.sex;if(o.age&&o.age!==ageOf(p)){p.age=o.age;delete p.birth;}
   Object.assign(p,{name:o.name,pid:o.pid,ward:o.ward,room:o.room,adm:o.adm,selfTel:o.selfTel,famName:o.famName,famRel:o.famRel,famTel:o.famTel,
     lastDest:o.dest,lastComp:{alone:o.alone,compName:o.compName,compRel:o.compRel,compTel:o.compTel},lastOutAt:o.departAt,count:(p.count||0)+1});
   if(o.dest)p.dests=[o.dest,...(p.dests||[]).filter(d=>d!==o.dest)].slice(0,10);
@@ -1150,7 +1161,7 @@ async function registerOuting(){
   showFormErrors(E);if(E.length)return;
   if(outings.some(o=>isActive(o)&&o.id!==nf.dataset.planId&&(o.pid===val(f,'pid')||(nf.dataset.patientId&&o.patientId===nf.dataset.patientId)))&&!await askConfirm(`${name} さんは既に外出・外泊中として登録されています。続けますか？`))return;
   const now=Date.now();
-  const o={id:uid(),name,pid:val(f,'pid'),ward:f.elements.ward.value,room:val(f,'room'),adm:val(f,'adm'),kind:f.elements.kind.value,departAt,dueAt,dueAtOriginal:dueAt,
+  const o={id:uid(),name,pid:val(f,'pid'),kana:hira(val(f,'kana')),sex:val(f,'sex'),age:half(val(f,'age')).replace(/[^0-9]/g,''),ward:f.elements.ward.value,room:val(f,'room'),adm:val(f,'adm'),kind:f.elements.kind.value,departAt,dueAt,dueAtOriginal:dueAt,
     dest:val(f,'dest'),selfTel:val(f,'selfTel'),famName:val(f,'famName'),famRel:val(f,'famRel'),famTel:val(f,'famTel'),alone,compName:alone?'':val(f,'compName'),compRel:alone?'':val(f,'compRel'),compTel:alone?'':val(f,'compTel'),
     clothes:val(f,'clothes'),tagId,consent:!!tagId,consentDate:tagId?(cs.st==='ok'?cs.date:val(f,'consentDate')):'',departNurse:nurse,note:val(f,'note'),status:plan?'planned':'out',createdAt:now,hasPhoto:!!pendingPhoto,log:[]};
   const planSrc=nf.dataset.planId&&outings.find(x=>x.id===nf.dataset.planId);if(planSrc){o.log=[...(planSrc.log||[])];if(!plan){o.departAtPlanned=planSrc.departAt;o.planNurse=planSrc.departNurse;}}
@@ -1174,7 +1185,7 @@ function lateMin(o){if(o.status==='cancelled')return '';const end=o.returnedAt||
 const lastLog=o=>{const l=(o.log||[]).slice(-1)[0];return l?`${fmt(l.at)} ${l.text}`:'';};
 // 一覧とCSVで共通の列（登録した項目をすべて）
 const COLS=[
- ['患者氏名',o=>o.name],['状態',o=>stLabel(o,stateOf(o,Date.now()))],['患者ID',o=>o.pid],['病棟',o=>o.ward],['部屋',o=>o.room],['入院形態',o=>o.adm],['区分',o=>o.kind],
+ ['患者氏名',o=>o.name],['ふりがな',o=>o.kana||''],['性別',o=>o.sex||''],['年齢',o=>o.age||''],['状態',o=>stLabel(o,stateOf(o,Date.now()))],['患者ID',o=>o.pid],['病棟',o=>o.ward],['部屋',o=>o.room],['入院形態',o=>o.adm],['区分',o=>o.kind],
  ['出発',o=>fmtFull(o.departAt)+(o.status==='planned'?'（予定）':'')],['帰院予定（当初）',o=>fmtFull(o.dueAtOriginal)],['帰院予定（最終）',o=>fmtFull(o.dueAt)],
  ['帰院',o=>fmtFull(o.returnedAt)],['遅れ(分)',o=>{const m=lateMin(o);return m===''||m===0?'':m;}],['捜索',o=>hadSearch(o)?'あり':''],
  ['行き先',o=>o.dest],['本人携帯',o=>o.selfTel],['家族氏名',o=>o.famName],['家族続柄',o=>o.famRel],['家族携帯',o=>o.famTel],
@@ -1217,7 +1228,7 @@ function printHistory(){
   const cols=[['#',2.5],['患者氏名・ID',10],['病棟・部屋／入院形態',8],['区分／状態',7],['出発',8],['帰院予定（当初／最終）',9],['帰院／遅れ／捜索',8],['行き先',9],['本人・家族の連絡先',11],['同行',8],['服装／写真',9],['タグ（同意・回収）',6],['出発確認／帰院確認',7],['備考・最新の経過',13.5]];
   const body=rows.map((o,i)=>{const lm=lateMin(o),st=stateOf(o,now);
     const cells=[i+1,
-      `<span class="em">${esc(o.name)}</span>${o.pid?'<br>ID '+esc(o.pid):''}`,
+      `<span class="em">${esc(o.name)}</span>${o.pid?'<br>ID '+esc(o.pid):''}${sexAge(o)?'<br>'+esc(sexAge(o)):''}`,
       br([wardText(o),o.adm]),
       br([o.kind,stLabel(o,st)]),
       esc(fmt(o.departAt))+(o.status==='planned'?'<br>（予定）':''),
@@ -1329,12 +1340,81 @@ $('#calWard').addEventListener('change',renderCalendar);
 /* ---------- 患者台帳 ---------- */
 function renderPatients(){
   const q=$('#ptQ').value.trim();
-  const list=patients.filter(p=>!q||(p.name+' '+(p.pid||'')).includes(q)).sort((a,b)=>(b.lastOutAt||0)-(a.lastOutAt||0));
-  $('#ptTable').innerHTML=`<tr><th>氏名</th><th>ID</th><th>病棟</th><th>入院形態</th><th>本人携帯</th><th>家族</th><th>同意書</th><th>前回の行き先</th><th>外出回数</th><th>最終外出</th><th></th></tr>`+
-   (list.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.pid)}</td><td>${esc(wardText(p))}</td><td>${esc(p.adm)}</td><td>${esc(p.selfTel)}</td><td>${esc([p.famName,p.famRel?'（'+p.famRel+'）':'',p.famTel].filter(Boolean).join(' '))}</td><td style="white-space:nowrap">${(()=>{const c=consentState(p);return c.st==='ok'?'<span class="lbl lbl-ok">取得 '+ymd(c.date)+'</span>':c.st==='withdrawn'?'<span class="lbl lbl-overdue">撤回 '+ymd(c.date)+'</span>':'<span class="lbl lbl-returned">未登録</span>';})()} <button class="btn sm" data-ptcon="${p.id}">同意書</button></td><td>${esc(p.lastDest)}</td><td>${p.count||0}</td><td>${fmt(p.lastOutAt)}</td>
-     <td style="white-space:nowrap"><button class="btn sm pri" data-ptgo="${p.id}">この患者で登録</button> <button class="btn sm" data-pthist="${p.id}">過去の記録</button> <button class="btn sm" data-ptdel="${p.id}">削除</button></td></tr>`).join('')||'<tr><td colspan="11">台帳に患者がいません</td></tr>');
+  const list=patients.filter(p=>matchQ(p,q)).sort((a,b)=>(b.lastOutAt||0)-(a.lastOutAt||0));
+  $('#ptTable').innerHTML=`<tr><th>氏名</th><th>ID</th><th>性別・年齢</th><th>病棟</th><th>入院形態</th><th>本人携帯</th><th>家族</th><th>同意書</th><th>前回の行き先</th><th>外出回数</th><th>最終外出</th><th></th></tr>`+
+   (list.map(p=>`<tr><td><b>${esc(p.name)}</b>${p.kana?'<br><span class="sub">'+esc(p.kana)+'</span>':''}</td><td>${esc(p.pid)}</td><td style="white-space:nowrap">${esc(sexAge(p))}</td><td>${esc(wardText(p))}</td><td>${esc(p.adm)}</td><td>${esc(p.selfTel)}</td><td>${esc([p.famName,p.famRel?'（'+p.famRel+'）':'',p.famTel].filter(Boolean).join(' '))}</td><td style="white-space:nowrap">${(()=>{const c=consentState(p);return c.st==='ok'?'<span class="lbl lbl-ok">取得 '+ymd(c.date)+'</span>':c.st==='withdrawn'?'<span class="lbl lbl-overdue">撤回 '+ymd(c.date)+'</span>':'<span class="lbl lbl-returned">未登録</span>';})()} <button class="btn sm" data-ptcon="${p.id}">同意書</button></td><td>${esc(p.lastDest)}</td><td>${p.count||0}</td><td>${fmt(p.lastOutAt)}</td>
+     <td style="white-space:nowrap"><button class="btn sm pri" data-ptgo="${p.id}">この患者で登録</button> <button class="btn sm" data-pthist="${p.id}">過去の記録</button> <button class="btn sm" data-ptdel="${p.id}">削除</button></td></tr>`).join('')||'<tr><td colspan="12">台帳に患者がいません</td></tr>');
 }
 $('#ptQ').addEventListener('input',renderPatients);
+
+/* ---------- 患者台帳：CSV取り込み ---------- */
+const CSV_MAP={name:['氏名','患者氏名','名前','患者名'],kana:['ふりがな','フリガナ','かな','カナ','よみがな','ヨミガナ','読み'],pid:['患者id','id','患者番号','カルテ番号','診察券番号','患者no'],
+ sex:['性別'],age:['年齢'],birth:['生年月日','誕生日'],famName:['家族氏名','家族名','家族の氏名','キーパーソン','連絡先氏名','家族'],famRel:['続柄','家族続柄','家族の続柄'],
+ famTel:['家族連絡先','家族電話','家族携帯','家族の携帯番号','家族電話番号','連絡先','電話番号'],selfTel:['本人連絡先','本人電話','本人携帯','本人の携帯番号'],
+ ward:['病棟'],room:['部屋','部屋番号','病室'],adm:['入院形態']};
+const CSV_LABEL={name:'氏名',kana:'ふりがな',pid:'患者ID',sex:'性別',age:'年齢',birth:'生年月日',famName:'家族氏名',famRel:'続柄',famTel:'家族連絡先',selfTel:'本人連絡先',ward:'病棟',room:'部屋番号',adm:'入院形態'};
+function decodeCsv(buf){const u=new Uint8Array(buf);
+  try{let t=new TextDecoder('utf-8',{fatal:true}).decode(u);return t.replace(/^﻿/,'');}catch(e){}
+  try{return new TextDecoder('shift_jis').decode(u);}catch(e){return new TextDecoder('utf-8').decode(u);}}
+function parseCsv(t){const rows=[];let row=[],cell='',q=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(q){if(c==='"'){if(t[i+1]==='"'){cell+='"';i++;}else q=false;}else cell+=c;}
+    else if(c==='"')q=true;else if(c===','||c==='\t'){row.push(cell);cell='';}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(cell);rows.push(row);row=[];cell='';}
+    else cell+=c;}
+  if(cell!==''||row.length){row.push(cell);rows.push(row);}
+  return rows.filter(r=>r.some(x=>String(x).trim()!==''));}
+const ERA={'明治':1867,'大正':1911,'昭和':1925,'平成':1988,'令和':2018,'M':1867,'T':1911,'S':1925,'H':1988,'R':2018};
+function parseBirth(v){v=half(v);if(!v)return '';let m=v.match(/^(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?$/);if(m)return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+  m=v.match(/^(明治|大正|昭和|平成|令和|[MTSHR])\s*(\d{1,2}|元)[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?$/i);if(m){const y=ERA[m[1].toUpperCase()]||ERA[m[1]];return `${y+(m[2]==='元'?1:+m[2])}-${pad(m[3])}-${pad(m[4])}`;}
+  m=v.match(/^(\d{4})(\d{2})(\d{2})$/);if(m)return `${m[1]}-${m[2]}-${m[3]}`;return null;}
+const telN=v=>half(v).replace(/[－ー―‐−‑]/g,'-').replace(/\s/g,'');
+function normSex(v){v=half(v).toUpperCase();if(!v)return '';if(/^(男|男性|M|MALE|1)$/.test(v))return '男';if(/^(女|女性|F|FEMALE|2)$/.test(v))return '女';return 'その他';}
+function readPatientCsv(text){
+  const rows=parseCsv(text);if(rows.length<2)return {error:'見出しの行とデータの行が見つかりません。1行目に「氏名」「患者ID」などの見出しを入れてください。'};
+  const head=rows[0].map(h=>half(h).replace(/\s/g,'').toLowerCase());const col={};const unused=[];
+  head.forEach((h,i)=>{const k=Object.keys(CSV_MAP).find(k=>CSV_MAP[k].some(a=>a.toLowerCase()===h));if(k&&col[k]===undefined)col[k]=i;else if(h)unused.push(rows[0][i]);});
+  if(col.pid===undefined||col.name===undefined)return {error:'見出しに「氏名」と「患者ID」の列が必要です。ひな形CSVの1行目と同じ見出しにしてください。'};
+  const out=[],bad=[],seen={};
+  rows.slice(1).forEach((r,ri)=>{const g=k=>col[k]===undefined?'':String(r[col[k]]||'').trim();const line=ri+2;
+    const d={pid:half(g('pid')),name:g('name').replace(/　/g,' ').replace(/\s+/g,' '),kana:hira(g('kana')).replace(/　/g,' ').replace(/\s+/g,' '),sex:normSex(g('sex')),
+      age:half(g('age')).replace(/[^0-9]/g,''),famName:g('famName').replace(/　/g,' '),famRel:g('famRel'),famTel:telN(g('famTel')),selfTel:telN(g('selfTel')),
+      ward:half(g('ward')),room:half(g('room')),adm:g('adm')};
+    const b=g('birth');if(b){const pb=parseBirth(b);if(pb===null){bad.push(`${line}行目：生年月日「${b}」を読み取れません（例 1980/4/1）`);}else d.birth=pb;}
+    if(!d.pid||!d.name){bad.push(`${line}行目：${!d.name?'氏名':'患者ID'}が空欄のため取り込めません`);return;}
+    if(d.ward&&!WARDS.includes(d.ward))bad.push(`${line}行目：病棟「${d.ward}」はアプリの病棟（${WARDS.join('・')}）にないため、病棟は空欄にします`),d.ward='';
+    if(seen[d.pid])bad.push(`${line}行目：患者ID ${d.pid} が${seen[d.pid]}行目と重複しています（後の行を使います）`);seen[d.pid]=line;
+    const i=out.findIndex(x=>x.pid===d.pid);if(i>=0)out[i]=d;else out.push(d);});
+  return {rows:out,bad,cols:Object.keys(col).map(k=>CSV_LABEL[k]),unused};
+}
+$('#ptCsvBtn').addEventListener('click',()=>{$('#ptCsvFile').value='';$('#ptCsvFile').click();});
+$('#ptCsvTpl').addEventListener('click',()=>{
+  const csv='﻿'+['氏名,ふりがな,患者ID,性別,年齢,家族氏名,続柄,家族連絡先,本人連絡先,病棟,部屋番号,入院形態','(見本) 外出 太郎,がいしゅつ たろう,A0001,男,45,(見本) 外出 花子,妻,090-0000-0000,,東1,101,任意入院'].join('\r\n')+'\r\n';
+  download('患者台帳_取り込み用ひな形.csv',new Blob([csv],{type:'text/csv'}));});
+$('#ptCsvFile').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;
+  const r=readPatientCsv(decodeCsv(await file.arrayBuffer()));
+  if(r.error){openDlg('CSVを取り込めません',`<p>${esc(r.error)}</p><p class="hint">Excelでは「ファイル」→「名前を付けて保存」→ ファイルの種類「CSV（コンマ区切り）」または「CSV UTF-8」で保存してください。</p>`,[{label:'閉じる'}]);return;}
+  const F=['name','kana','sex','age','birth','famName','famRel','famTel','selfTel','ward','room','adm'];
+  let nNew=0,nUpd=0,nSame=0;r.rows.forEach(d=>{const p=patients.find(x=>x.pid===d.pid);if(!p){nNew++;return;}
+    (F.some(k=>d[k]&&String(d[k])!==String(p[k]||''))?nUpd++:nSame++);});
+  const prev=r.rows.slice(0,8).map(d=>`<tr><td>${esc(d.name)}<br><span class="sub">${esc(d.kana)}</span></td><td>${esc(d.pid)}</td><td>${esc([d.sex,d.birth?ageOf(d)+'歳':(d.age?d.age+'歳':'')].filter(Boolean).join(' '))}</td><td>${esc([d.famName,d.famRel?'（'+d.famRel+'）':'',d.famTel].filter(Boolean).join(' '))}</td><td>${patients.some(x=>x.pid===d.pid)?'更新':'新規'}</td></tr>`).join('');
+  openDlg(`CSVの取り込み：${file.name}`,`
+    <p style="margin-top:0"><b>新規 ${nNew}人</b>・<b>更新 ${nUpd}人</b>・変更なし ${nSame}人${r.bad.length?`・<span style="color:var(--bad)"><b>確認 ${r.bad.length}件</b></span>`:''}</p>
+    <p class="hint" style="margin:0">読み取った列：${esc(r.cols.join('、'))}${r.unused.length?`<br>使わない列：${esc(r.unused.join('、'))}`:''}</p>
+    ${r.bad.length?`<div class="warnbox" style="max-height:120px;overflow:auto;margin-top:6px">${r.bad.slice(0,30).map(esc).join('<br>')}${r.bad.length>30?'<br>ほか '+(r.bad.length-30)+'件':''}</div>`:''}
+    <div class="tablewrap" style="margin-top:8px"><table><tr><th>氏名</th><th>ID</th><th>性別・年齢</th><th>家族・連絡先</th><th></th></tr>${prev}</table></div>
+    ${r.rows.length>8?`<p class="hint">ほか ${r.rows.length-8}人</p>`:''}
+    <label class="consent" style="margin-top:8px"><input type="checkbox" name="keep" checked>CSVの空欄では台帳の内容を消さない（おすすめ）</label>
+    <p class="hint">同じ患者IDの人は、CSVの内容で上書きします。外出の記録・同意書の記録は変わりません。</p>`,
+  [{label:'やめる'},{label:`${nNew+nUpd}人を取り込む`,cls:'pri',onClick:async f=>{
+    const keep=f.elements.keep.checked;let c=0;
+    for(const d of r.rows){let p=patients.find(x=>x.pid===d.pid);
+      if(!p){p={id:uid(),pid:d.pid,count:0,dests:[],createdAt:Date.now()};patients.push(p);}
+      for(const k of F){if(d[k]||!keep){p[k]=d[k]||'';}}
+      if(d.birth)delete p.age;else if(d.age)delete p.birth;
+      p.importedAt=Date.now();await dbPut('patients',p);c++;}
+    renderPatients();renderPatientChips();toast(`患者台帳に ${c}人を取り込みました`);}}]);
+});
 function dlgConsent(p){
   openDlg(`同意書：${p.name}`,`<p class="hint" style="margin-top:0">タグを持って外出することへの同意書です。ここに記録すると、外出登録のたびの確認が不要になります。撤回を記録するとタグを渡せなくなります。</p>
     <label>同意書の取得日<input type="date" name="cdate" value="${esc(p.consentDate||'')}"></label>
@@ -1467,7 +1547,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.4.0';
+const APP_VERSION='1.5.0';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
