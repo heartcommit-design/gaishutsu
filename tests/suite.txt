@@ -17,3 +17,4 @@ test_v170_register
 test_v180_compact
 test_v190_demo50
 test_watch_gap
+test_v191_plan_patient

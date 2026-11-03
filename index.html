@@ -893,7 +893,7 @@ async function goPlan(o,nurse,tag,cdate){
   const tagTxt=tag?(before&&before!==tag?`（予約 ${before} → タグ ${tag} 貸出）`:`（タグ ${tag} 貸出）`):(before?`（予約していた ${before} は使わず・タグなし）`:'（タグなし）');
   addLog(o,`${o.kind}に出発（予定 ${fmt(o.departAtPlanned)} → 実際 ${fmt(now)}／帰院予定 ${fmt(o.dueAt)} は変更なし）`+tagTxt,nurse);
   rememberNurse(nurse);
-  if(pt){pt.lastOutAt=now;await dbPut('patients',pt);}
+  if(pt){o.ptPrev=markOuting(pt,o,now);await dbPut('patients',pt);}
   await saveOuting(o);renderPlans();lastSig='';showTab('active');tick();toast(`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）。間違えた時は30分以内なら、その人の「詳細」→「GOの取消」で予定に戻せます`,7000);
 }
 function startDeparture(o,mode){
@@ -1064,6 +1064,8 @@ function dlgUndo(o){
 async function undoDeparture(o,reason,staff){
   const was=o.departAt;o.status='planned';o.departAt=o.departAtPlanned;o.departNurse=o.planNurse||o.departNurse;delete o.departAtPlanned;delete o.planNurse;delete o.ackAt;
   if(o.tagId){const t=tags.find(x=>x.id===o.tagId);if(t&&t.outingId===o.id){t.status='reserved';await saveTag(t);}}
+  // GOで更新した台帳の「前回の外出」をGO前に戻す（その後に別の出発で更新されていたら戻さない）
+  if(o.ptPrev){const pt=planPatient(o);if(pt&&pt.lastOutAt===o.ptPrev.setAt){const {setAt,...prev}=o.ptPrev;Object.assign(pt,prev);await dbPut('patients',pt);}delete o.ptPrev;}
   addLog(o,`出発を取り消して予定に戻した（${fmt(was)} の出発を取消、出発予定 ${fmt(o.departAt)}）理由：${reason}`+(o.tagId?`（タグ ${o.tagId} は予約に戻した）`:''),staff);rememberNurse(staff);
   await saveOuting(o);lastSig='';tick();renderPlans();showTab('plan');toast(`${o.name} さんを予定に戻しました`);
 }
@@ -1127,11 +1129,20 @@ async function upsertPatient(o,loadedId){
   let p=o.pid?patients.find(x=>x.pid===o.pid):(patients.find(x=>x.id===loadedId&&x.name===o.name)||patients.find(x=>x.name===o.name&&!x.pid));
   if(!p){p={id:uid(),count:0,dests:[],createdAt:Date.now()};patients.push(p);}
   if(o.kana)p.kana=o.kana;if(o.sex)p.sex=o.sex;if(o.age&&o.age!==ageOf(p)){p.age=o.age;delete p.birth;}
-  Object.assign(p,{name:o.name,pid:o.pid,ward:o.ward,room:o.room,adm:o.adm,selfTel:o.selfTel,famName:o.famName,famRel:o.famRel,famTel:o.famTel,
-    lastDest:o.dest,lastComp:{alone:o.alone,compName:o.compName,compRel:o.compRel,compTel:o.compTel},lastOutAt:o.departAt,count:(p.count||0)+1});
-  if(o.dest)p.dests=[o.dest,...(p.dests||[]).filter(d=>d!==o.dest)].slice(0,10);
+  Object.assign(p,{name:o.name,pid:o.pid,ward:o.ward,room:o.room,adm:o.adm,selfTel:o.selfTel,famName:o.famName,famRel:o.famRel,famTel:o.famTel});
+  // 前回外出日時・回数・前回の行き先・同行者は、実際に出発したとき（status:'out'）だけ更新する。予定の登録・修正では変えない
+  if(o.status==='out'){const prev=markOuting(p,o,o.departAt);if(o.departAtPlanned)o.ptPrev=prev;}
   if(o.demo)p.demo=true;
   await dbPut('patients',p);return p;
+}
+// 台帳の「前回の外出」を出発時刻 at で更新し、更新前の値を返す（GOの取消で戻すため）
+function markOuting(p,o,at){
+  const prev={lastOutAt:p.lastOutAt||0,count:p.count||0,lastDest:p.lastDest||'',lastComp:p.lastComp||{alone:true},dests:[...(p.dests||[])],setAt:at};
+  // 1.9.0までの版で登録した予定は、登録時にすでに回数を足して前回外出日時を予定の日時（未来）にしている。その予定の出発では回数を足さない
+  const counted=!!o.departAtPlanned&&(p.lastOutAt||0)>at;
+  Object.assign(p,{lastDest:o.dest,lastComp:{alone:o.alone,compName:o.compName,compRel:o.compRel,compTel:o.compTel},lastOutAt:at,count:(p.count||0)+(counted?0:1)});
+  if(o.dest)p.dests=[o.dest,...(p.dests||[]).filter(d=>d!==o.dest)].slice(0,10);
+  return prev;
 }
 function isPlanForm(){const d=fromLocalInput(nf.elements.departAt.value);return (!nf.dataset.planId||nf.dataset.planMode==='edit')&&d&&d>Date.now()+PLAN_MIN*60000;}
 function updatePlanMode(){const plan=isPlanForm();$('#fsClothes').hidden=false;$('#fsTag').hidden=false;{const o0=$('#tagSelect').options[0];if(o0&&o0.value==='')o0.textContent=plan?'タグなし（出発時に選ぶ）':'タグなし';}
@@ -1571,9 +1582,9 @@ $('#demoIn').addEventListener('click',async()=>{
     const o={id:uid(),name:p.name,pid:p.pid,kana:p.kana,sex:p.sex,age:p.age,ward:p.ward,room:p.room,adm:p.adm,kind:d.kind,departAt:d.departAt,dueAt:d.dueAt,dueAtOriginal:d.dueAt,dest:d.dest,alone:!d.comp,
       compName:d.comp?p.famName:'',compRel:d.comp?p.famRel:'',compTel:d.comp?p.famTel:'',...famOf(p),clothes:d.clothes,note:'',tagId:t?t.id:'',consent:!!t,consentDate:t?p.consentDate:'',departNurse:'(デモ) 看護師A',status:'out',createdAt:now,hasPhoto:false,demo:true,log:[]};
     addLog(o,`${o.kind}に出発（デモ）`+(t?`（タグ ${t.id} 貸出）`:''),'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;if(t){t.status='inuse';t.outingId=o.id;await saveTag(t);}await saveOuting(o);outings.push(o);}
-  {const p=P(3);p.consentDate=p.consentDate||toDateInput(now-30*D);const dep=now+90*M;const keep={lastOutAt:p.lastOutAt,count:p.count};
+  {const p=P(3);p.consentDate=p.consentDate||toDateInput(now-30*D);const dep=now+90*M;
    const o={id:uid(),name:p.name,pid:p.pid,kana:p.kana,sex:p.sex,age:p.age,ward:p.ward,room:p.room,adm:p.adm,kind:'外泊',departAt:dep,dueAt:dep+26*H,dueAtOriginal:dep+26*H,dest:'自宅（明石市）',alone:false,compName:p.famName,compRel:p.famRel,compTel:p.famTel,...famOf(p),clothes:'',note:'',tagId:'',consent:false,departNurse:'(デモ) 看護師A',status:'planned',createdAt:now,hasPhoto:false,demo:true,log:[]};
-   addLog(o,`外泊の予定を登録（出発予定 ${fmt(dep)}）`,'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;Object.assign(p,keep);await saveOuting(o);outings.push(o);}
+   addLog(o,`外泊の予定を登録（出発予定 ${fmt(dep)}）`,'(デモ) 看護師A');o.patientId=(await upsertPatient(o,null)).id;await saveOuting(o);outings.push(o);}
   for(const p of list)await dbPut('patients',p);
   lastSig='';showTab('active');tick();toast('デモデータを入れました（東1病棟の入院患者50人・外出中3人・予定1件）',5000);});
 $('#demoOut').addEventListener('click',async()=>{for(const o of outings.filter(x=>x.demo)){await dbDel('outings',o.id);await dbDel('photos',o.id);dropPhotoURL(o.id);const t=tags.find(x=>x.outingId===o.id);if(t){t.status='available';t.outingId=null;await saveTag(t);}}
@@ -1633,7 +1644,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.9.0';
+const APP_VERSION='1.9.1';
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
