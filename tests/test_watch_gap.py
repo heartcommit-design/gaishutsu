@@ -46,7 +46,7 @@ async def main():
         print('after cancel active:', await pg.locator('#activeList .card').count(), '| T-02:', await pg.evaluate("tags.find(t=>t.id==='T-02').status"), '| status:', await pg.evaluate("outings[1].status"))
         # --- withdrawn consent blocks tag
         await pg.click('nav button[data-tab=patients]'); await pg.wait_for_timeout(200)
-        await pg.click('[data-ptcon]'); await pg.check('#dlgBody input[name=withdrawn]'); await pg.locator('#dlgBody .nchip').first.click(); await pg.click('#dlgActions button.pri'); await pg.wait_for_timeout(400)
+        await pg.locator('#ptTable tbody tr').first.locator('[data-ptwd]').click(); await pg.locator('#dlgBody .nchip').first.click(); await pg.click('#dlgActions button.bad'); await pg.wait_for_timeout(400)
         print('patient table consent:', (await pg.locator('#ptTable tr').nth(1).inner_text()).split('\t')[6][:20])
         await pg.click('nav button[data-tab=new]'); await pg.click('#pChips .chip'); await pg.select_option('#tagSelect','T-03'); await pg.wait_for_timeout(100)
         print('withdrawn box:', (await pg.inner_text('#consentBox'))[:30])

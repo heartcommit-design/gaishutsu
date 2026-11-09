@@ -8,7 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); APP = os.path.dirname(HERE)
 OUT = os.path.join(HERE, 'out'); os.makedirs(OUT, exist_ok=True)
 URL = 'file://' + APP + '/index.html#detail'
 SET = "([s,v])=>{const i=document.querySelector(s);i.value=v;i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new Event('change',{bubbles:true}))}"
-PT = "pid=>{const p=patients.find(x=>x.pid===pid);return p&&{lastOutAt:p.lastOutAt||0,count:p.count||0,lastDest:p.lastDest||'',dests:p.dests||[],ward:p.ward,room:p.room||'',famTel:p.famTel||''}}"
+PT = "pid=>{const p=patients.find(x=>x.pid===pid);return p&&{lastOutAt:p.lastOutAt||0,count:p.count||0,lastDest:p.lastDest||'',dests:p.dests||[],ward:p.ward,famTel:p.famTel||''}}"
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
         pg.goto(URL); pg.wait_for_timeout(800); pg.click('#startOv'); pg.wait_for_timeout(300)
         pt = lambda pid: pg.evaluate(PT, pid)
 
-        def fill_new(name, pid, dest, hours=None, room='', fam=''):
+        def fill_new(name, pid, dest, hours=None, fam=''):
             pg.click('nav button[data-tab=new]'); pg.wait_for_timeout(200)
             pg.fill('#pSearch', pid); pg.wait_for_timeout(200)
             chip = pg.locator('#pChips [data-pt]')
@@ -33,7 +33,6 @@ def main():
                 pg.evaluate(SET, ['input[name=departAt]', pg.evaluate(f"toLocalInput(round15(Date.now()+{hours}*3600000))")])
             pg.click('#dueQuick button[data-h="4"]')
             pg.fill('input[name=dest]', dest)
-            if room: pg.fill('input[name=room]', room)
             if fam: pg.fill('input[name=famTel]', fam)
             pg.fill('input[name=departNurse]', '(デモ) 看護師A')
 
@@ -50,8 +49,8 @@ def main():
         assert pg.evaluate("outings.find(o=>o.pid==='P0001').status") == 'returned'
         before = pt('P0001')
 
-        # ---- 2. 予定を登録しても lastOutAt・count・前回の行き先は変わらない。基本情報（部屋・家族の連絡先）は台帳に入る
-        fill_new('テスト 太郎', 'P0001', '見本の駅', hours=3, room='見本201', fam='090-0000-0001')
+        # ---- 2. 予定を登録しても lastOutAt・count・前回の行き先は変わらない。基本情報（家族の連絡先）は台帳に入る（1.11.0 で部屋はなくした）
+        fill_new('テスト 太郎', 'P0001', '見本の駅', hours=3, fam='090-0000-0001')
         assert pg.inner_text('#submitBtn') == '予定として登録'
         pg.click('#submitBtn'); pg.wait_for_timeout(900)
         plan = pg.evaluate("outings.find(o=>o.pid==='P0001'&&o.status==='planned')")
@@ -59,7 +58,7 @@ def main():
         a = pt('P0001')
         assert (a['lastOutAt'], a['count'], a['lastDest']) == (before['lastOutAt'], before['count'], before['lastDest']), (before, a)
         assert a['lastOutAt'] < pg.evaluate('Date.now()'), '前回外出日時が未来になっている'
-        assert a['room'] == '見本201' and a['famTel'] == '090-0000-0001', a
+        assert a['famTel'] == '090-0000-0001', a
         # 呼び出し欄に未来の日時（予定の出発日時）が出ない
         pg.click('nav button[data-tab=new]'); pg.wait_for_timeout(200)
         pg.fill('#pSearch', 'P0001'); pg.wait_for_timeout(300)
