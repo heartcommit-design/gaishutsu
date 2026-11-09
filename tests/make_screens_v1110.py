@@ -23,7 +23,7 @@ def main():
     with sync_playwright() as p:
         b = p.chromium.launch()
         for w, h, tag in SIZES:
-            ctx = b.new_context(viewport={'width': w, 'height': h}, device_scale_factor=2, has_touch=True)
+            ctx = b.new_context(viewport={'width': w, 'height': h}, device_scale_factor=1, has_touch=True)
             pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
             pg.goto('file://' + APP + '/index.html'); pg.wait_for_timeout(700); pg.click('#startOv')
             pg.click('nav button[data-tab=settings]'); pg.click('#demoIn'); pg.wait_for_timeout(1500)

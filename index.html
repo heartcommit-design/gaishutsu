@@ -960,12 +960,20 @@ async function goPlan(o,nurse,tag,cdate,extra){
   if(tag&&pt&&consentState(pt).st==='none'&&cdate){pt.consentDate=cdate;pt.consentLog=[...(pt.consentLog||[]),{at:now,text:`同意書取得日を ${ymd(cdate)} に登録（出発時）`,by:nurse}];}
   const tagTxt=tag?(before&&before!==tag?`（予約 ${before} → タグ ${tag} 貸出）`:`（タグ ${tag} 貸出）`):(before?`（予約していた ${before} は使わず・タグなし）`:'（タグなし）');
   addLog(o,`${o.kind}に出発（予定 ${fmt(o.departAtPlanned)} → 実際 ${fmt(now)}／帰院予定 ${fmt(o.dueAt)} は変更なし）`+tagTxt,nurse);
-  // 出発の画面で任意に撮った写真・記入した服装（写真は帰院で自動削除）
-  if(extra&&extra.photo){await dbPut('photos',extra.photo,o.id);dropPhotoURL(o.id);addLog(o,o.hasPhoto?'服装写真を撮り直し（出発時）':'服装写真を登録（出発時）',nurse);o.hasPhoto=true;}
-  if(extra&&typeof extra.clothes==='string'&&extra.clothes!==(o.clothes||'')){o.clothes=extra.clothes;addLog(o,'服装を記入（出発時）',nurse);}
+  // 出発の画面で記入した服装（空欄のときは予定の内容のままにし、記録も残さない）
+  const cl=extra&&typeof extra.clothes==='string'?extra.clothes.trim():'';
+  if(cl&&cl!==(o.clothes||'')){o.clothes=cl;addLog(o,'服装を記入（出発時）',nurse);}
   rememberNurse(nurse);
   if(pt){rememberClothes(pt,o.clothes);o.ptPrev=markOuting(pt,o,now);await dbPut('patients',pt);}
-  await saveOuting(o);renderPlans();lastSig='';showTab('active');tick();toast(`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）。間違えた時は30分以内なら、その人の「詳細」→「GOの取消」で予定に戻せます`,7000);
+  // 外出の状態（出発・タグ）を先に保存し、写真はそのあとに保存する（写真で失敗しても出発とタグは食い違わない）
+  await saveOuting(o);
+  let photoErr=false;
+  if(extra&&extra.photo){try{await dbPut('photos',extra.photo,o.id);dropPhotoURL(o.id);addLog(o,o.hasPhoto?'服装写真を撮り直し（出発時）':'服装写真を登録（出発時）',nurse);o.hasPhoto=true;}
+    catch(err){photoErr=true;addLog(o,'服装写真を保存できなかった（出発は登録済み）',nurse);}
+    await saveOuting(o);}
+  renderPlans();lastSig='';showTab('active');tick();
+  toast(photoErr?`${o.name} さんの${o.kind}の出発は登録しましたが、服装写真を保存できませんでした。服装は記入欄の内容で残っています。`
+    :`${o.name} さんが${o.kind}に出発しました（帰院予定 ${fmt(o.dueAt)}）。間違えた時は30分以内なら、その人の「詳細」→「GOの取消」で予定に戻せます`,photoErr?9000:7000);
 }
 function backToPlans(){clearPatientForm();nf.elements.departAt.value='';prepareNewForm();showTab('plan');toast('予定は変わっていません');}
 $('#formBack').addEventListener('click',backToPlans);
@@ -1619,9 +1627,11 @@ $('#ptCsvFile').addEventListener('change',async e=>{const file=e.target.files[0]
   const F=['name','kana','sex','age','birth','famName','famRel','famTel','selfTel','ward','adm'];
   let nNew=0,nUpd=0,nSame=0;r.rows.forEach(d=>{const p=patients.find(x=>x.pid===d.pid);if(!p){nNew++;return;}
     (F.some(k=>d[k]&&String(d[k])!==String(p[k]||''))?nUpd++:nSame++);});
-  const prev=r.rows.slice(0,8).map(d=>`<tr><td>${esc(d.name)}<br><span class="sub">${esc(d.kana)}</span></td><td>${esc(d.pid)}</td><td>${esc([d.sex,d.birth?ageOf(d)+'歳':(d.age?d.age+'歳':'')].filter(Boolean).join(' '))}</td><td>${esc([d.famName,d.famRel?'（'+d.famRel+'）':'',d.famTel].filter(Boolean).join(' '))}</td><td>${patients.some(x=>x.pid===d.pid)?'更新':'新規'}</td></tr>`).join('');
+  const nDis=r.rows.filter(d=>isDis(patients.find(x=>x.pid===d.pid))).length;
+  const prev=r.rows.slice(0,8).map(d=>`<tr><td>${esc(d.name)}<br><span class="sub">${esc(d.kana)}</span></td><td>${esc(d.pid)}</td><td>${esc([d.sex,d.birth?ageOf(d)+'歳':(d.age?d.age+'歳':'')].filter(Boolean).join(' '))}</td><td>${esc([d.famName,d.famRel?'（'+d.famRel+'）':'',d.famTel].filter(Boolean).join(' '))}</td><td>${isDis(patients.find(x=>x.pid===d.pid))?'更新（退院中）':patients.some(x=>x.pid===d.pid)?'更新':'新規'}</td></tr>`).join('');
   openDlg(`CSVの取り込み：${file.name}`,`
     <p style="margin-top:0"><b>新規 ${nNew}人</b>・<b>更新 ${nUpd}人</b>・変更なし ${nSame}人${r.bad.length?`・<span style="color:var(--bad)"><b>確認 ${r.bad.length}件</b></span>`:''}</p>
+    ${nDis?`<p class="warnbox" id="csvDis">退院中の${nDis}人は情報だけ更新します（退院のまま）。再入院のときは、患者台帳の「退院」の一覧で「再入院」を押してください。</p>`:''}
     <p class="hint" style="margin:0">読み取った列：${esc(r.cols.join('、'))}${r.unused.length?`<br>使わない列：${esc(r.unused.join('、'))}`:''}</p>
     ${r.bad.length?`<div class="warnbox" style="max-height:120px;overflow:auto;margin-top:6px">${r.bad.slice(0,30).map(esc).join('<br>')}${r.bad.length>30?'<br>ほか '+(r.bad.length-30)+'件':''}</div>`:''}
     <div class="tablewrap" style="margin-top:8px"><table><tr><th>氏名</th><th>ID</th><th>性別・年齢</th><th>家族・連絡先</th><th></th></tr>${prev}</table></div>
@@ -1774,7 +1784,10 @@ $('#bkLater').addEventListener('click',async()=>{settings.bkDismissDay=toDateInp
 $('#bkIn').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const d=JSON.parse(await f.text());if(d.app!=='gaishutsu_kanri')throw 0;
   if(!await askConfirm('現在のデータをバックアップの内容で置き換えます（写真は復元されません）。よろしいですか？'))return;
   await dbClear('outings');await dbClear('tags');await dbClear('photos');await dbClear('patients');for(const p of (d.patients||[]))await dbPut('patients',p);for(const t of d.tags)await saveTag(t);for(const o of d.outings)await saveOuting(o);settings={...settings,...d.settings};await saveSettings();
-  Object.keys(photoURL).forEach(dropPhotoURL);await loadAll();lastSig='';tick();renderSettings();toast('復元しました');}catch(err){toast('このファイルは読み込めません');}});
+  Object.keys(photoURL).forEach(dropPhotoURL);await loadAll();
+  // 1.10.0 以前のバックアップ（印なし）なら、行き先の3つを足す処理をもう一度だけ動かす（すでにあるものは重ねない）
+  if(!(d.settings&&d.settings.destAdded1110)){settings.destAdded1110=false;await addPresets1110();}
+  lastSig='';tick();renderSettings();renderPresetChips();toast('復元しました');}catch(err){toast('このファイルは読み込めません');}});
 $('#wipe').addEventListener('click',async()=>{if(!await askConfirm('すべての記録・患者台帳・タグ・写真を削除します。元に戻せません。'))return;if(!await askConfirm('本当に削除しますか？'))return;
   await dbClear('outings');await dbClear('tags');await dbClear('photos');await dbClear('patients');Object.keys(photoURL).forEach(dropPhotoURL);outings=[];tags=[];patients=[];lastSig='';tick();toast('削除しました');});
 $('#demoIn').addEventListener('click',async()=>{
