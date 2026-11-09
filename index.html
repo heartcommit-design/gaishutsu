@@ -87,6 +87,9 @@ dl.info dt{color:var(--sub)}dl.info dd{margin:0;font-weight:600;word-break:break
 .guide ol{margin:6px 0 0;padding-left:22px}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .panel{background:#fff;border-radius:12px;padding:16px;border:1px solid var(--line)}
+.about{display:grid;grid-template-columns:max-content 1fr;gap:8px 18px;margin:4px 0 0;font-size:15px;line-height:1.6}
+.about dt{color:var(--sub);font-weight:700;white-space:nowrap}
+.about dd{margin:0}
 fieldset{border:1px solid var(--line);border-radius:10px;margin:0 0 14px;padding:10px 14px 14px}
 legend{font-weight:700;padding:0 6px;color:#16304f}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
@@ -568,9 +571,20 @@ fieldset{min-width:0}
       <li>消音・集中モードのときに音が鳴るかは、実際のiPadで「アラーム音を試す」を押して確認してください。</li>
     </ul>
   </div>
+  <div class="panel" style="margin-top:14px" id="aboutPanel">
+    <h2>このアプリについて</h2>
+    <dl class="about">
+      <dt>名前</dt><dd>外出・外泊管理</dd>
+      <dt>版</dt><dd id="aboutVer"></dd>
+      <dt>作成</dt><dd>黒田 優</dd>
+      <dt>目的</dt><dd>入院患者さんの外出・外泊を見守り、帰院の遅れに早く気づき、対応の経過を記録に残すためのアプリです。外出・外泊の許可や判断は、これまでどおり看護師と医師が行います。</dd>
+      <dt>記録の保存</dt><dd>記録はこのiPadの中だけに保存し、外部には送信しません。作成者も記録を預かりません。</dd>
+      <dt>ご意見・不具合</dt><dd>黒田 優まで。いただいたご意見は改修に反映し、新しい版でお知らせします。</dd>
+    </dl>
+  </div>
 </section>
 </main>
-<div class="foot">外出・外泊管理（試作版）｜ アラームはこの端末で鳴ります（タグからは鳴らしません）。位置の検索は病院のiPhone／iPadの「探す」アプリで行い、この画面は位置情報を取得しません。</div>
+<div class="foot">外出・外泊管理（試作版・作成 黒田 優）｜ アラームはこの端末で鳴ります（タグからは鳴らしません）。位置の検索は病院のiPhone／iPadの「探す」アプリで行い、この画面は位置情報を取得しません。</div>
 
 <datalist id="nurseList"></datalist>
 <datalist id="destList"></datalist>
@@ -1644,7 +1658,8 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.9.1';
+const APP_VERSION='1.10.0';
+{const av=document.getElementById('aboutVer');if(av)av.textContent=APP_VERSION;}
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ctl=navigator.serviceWorker&&navigator.serviceWorker.controller;
