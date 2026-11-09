@@ -99,6 +99,19 @@ dl.info dt{color:var(--sub)}dl.info dd{margin:0;font-weight:600;word-break:break
 .linkbtn{border:none;background:none;color:var(--sub);text-decoration:underline;font:inherit;font-size:14px;cursor:pointer;padding:6px 0}
 .gophoto{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-top:10px}
 .gophoto .thumb,.gophoto .nophoto{width:96px;height:128px;font-size:13px}
+.stcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0 14px}
+.stcard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.stcard .k{color:var(--sub);font-size:14px;white-space:nowrap}
+.stcard .v{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.3;white-space:nowrap}
+.stcard .v small{font-size:16px;font-weight:700;margin-left:2px}
+.stcard .s{font-size:14px;color:var(--sub);white-space:nowrap}
+.stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:14px}
+.stgrid .panel{padding:12px 14px}
+.stgrid h3,.sth{font-size:17px;margin:0 0 8px}
+.sth{margin:16px 0 6px}
+.stgrid table.xl{min-width:0;width:100%}
+table.xl td.num,table.xl th.num{text-align:right;font-variant-numeric:tabular-nums}
+table.xl a.ptlink{color:var(--pri);font-weight:700;text-decoration:underline;cursor:pointer}
 fieldset{border:1px solid var(--line);border-radius:10px;margin:0 0 14px;padding:10px 14px 14px}
 legend{font-weight:700;padding:0 6px;color:#16304f}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
@@ -467,10 +480,24 @@ fieldset{min-width:0}
     <button class="btn" type="button" id="stPrint">印刷</button>
     <button class="btn" type="button" id="stCsv">CSV出力（Excel用）</button>
   </div>
-  <p class="hint" style="margin-top:0">出発日がその月の外出・外泊を数えます（予定・誤登録の取消は除く）。「遅れ」は当初の帰院予定より遅れて帰院したもの（まだ帰院していない場合は現時点での遅れ）です。</p>
-  <h3 style="margin:8px 0 6px">病棟別</h3>
-  <div class="xlwrap" style="max-height:none"><table class="xl" id="stTable"></table></div>
-  <h3 style="margin:16px 0 6px">入院形態別</h3>
+  <div class="seg" id="stWard"></div>
+  <p class="hint">出発日がその月の外出・外泊を数えます（予定・誤登録の取消は除く）。「遅れ」は当初の帰院予定より遅れて帰院したもの（まだ帰院していない場合は現時点での遅れ）です。</p>
+  <div class="stcards" id="stCards"></div>
+  <div class="stgrid">
+    <div class="panel"><h3>時間</h3><div id="stTime"></div></div>
+    <div class="panel"><h3>単独・同行</h3><table class="xl" id="stAlone"></table></div>
+    <div class="panel"><h3>行き先の上位5</h3><table class="xl" id="stDest"></table></div>
+  </div>
+  <div class="stgrid">
+    <div class="panel"><h3>曜日別の出発件数</h3><div class="tablewrap"><table class="xl" id="stWd"></table></div></div>
+    <div class="panel"><h3>時間帯別の出発件数</h3><table class="xl" id="stTb"></table></div>
+  </div>
+  <h3 class="sth">患者別</h3>
+  <p class="hint" style="margin:0 0 6px">回数の多い順です。氏名を押すと、その患者の過去の記録が開きます。</p>
+  <div class="xlwrap" style="max-height:60vh"><table class="xl" id="stPt"></table></div>
+  <div id="stWardBox"><h3 class="sth">病棟別</h3>
+  <div class="xlwrap" style="max-height:none"><table class="xl" id="stTable"></table></div></div>
+  <h3 class="sth">入院形態別</h3>
   <div class="xlwrap" style="max-height:none"><table class="xl" id="stTable2"></table></div>
 </section>
 
@@ -1384,26 +1411,85 @@ $('#csvBtn').addEventListener('click',()=>{
 });
 
 /* ---------- 月別集計 ---------- */
-let stY=null,stM=null;
+let stY=null,stM=null,stWard='';
 function monthOutings(){const s0=new Date(stY,stM,1).getTime(),e=new Date(stY,stM+1,1).getTime()-1;return outings.filter(o=>o.departAt>=s0&&o.departAt<=e&&o.status!=='planned'&&o.status!=='cancelled');}
 function statRow(label,L){const late=L.filter(o=>lateMin(o)>0),n=L.length;return {label,out:L.filter(o=>o.kind==='外出').length,stay:L.filter(o=>o.kind==='外泊').length,n,late:late.length,rate:n?(Math.round(late.length/n*1000)/10).toFixed(1):'0.0',maxLate:late.length?Math.max(...late.map(lateMin)):0,search:L.filter(hadSearch).length,tag:L.filter(o=>o.tagId).length,active:L.filter(isActive).length};}
 const ST_COLS=[['区分','label'],['外出','out'],['外泊','stay'],['合計','n'],['遅れ','late'],['遅れの割合(%)','rate'],['最大の遅れ(分)','maxLate'],['捜索','search'],['タグ使用','tag'],['集計時点で外出・外泊中','active']];
-function statsData(){const L=monthOutings();return {total:statRow('合計',L),byWard:WARDS.map(w=>statRow(w,L.filter(o=>o.ward===w))),byAdm:['任意入院','医療保護入院','その他'].map(a=>statRow(a,L.filter(o=>o.adm===a)))};}
-const stTbl=rows=>'<thead><tr>'+ST_COLS.map(c=>`<th>${c[0]}</th>`).join('')+'</tr></thead><tbody>'+rows.map(r=>`<tr${r.label==='合計'?' class="tot"':''}>`+ST_COLS.map(c=>`<td${c[1]==='label'?' class="lb"':''}>${esc(r[c[1]])}</td>`).join('')+'</tr>').join('')+'</tbody>';
+const ST_TB=[['〜10時',0,10],['10〜13時',10,13],['13〜16時',13,16],['16時〜',16,24]];
+const ST_PT=[['氏名','name'],['患者ID','pid'],['病棟','ward'],['外出','out'],['外泊','stay'],['遅れ','late'],['最大の遅れ(分)','maxLate'],['捜索','search'],['最後の外出','lastTxt']];
+const ptKey=o=>o.patientId||(o.pid?'pid:'+o.pid:'name:'+o.name);
+const stWardLabel=()=>stWard||'全病棟';
+function statsData(){
+  const all=monthOutings(),L=stWard?all.filter(o=>o.ward===stWard):all;
+  const total=statRow('合計',L),late=L.filter(o=>lateMin(o)>0).map(lateMin);
+  const ret=L.filter(o=>o.kind==='外出'&&o.status==='returned'&&o.returnedAt);
+  const dm={};L.forEach(o=>{const d=String(o.dest||'').trim();if(d)dm[d]=(dm[d]||0)+1;});
+  const pm=new Map();
+  for(const o of [...L].sort((a,b)=>a.departAt-b.departAt)){const k=ptKey(o);let r=pm.get(k);
+    if(!r){r={key:k,name:o.name,pid:o.pid||'',ward:o.ward||'',out:0,stay:0,late:0,maxLate:0,search:0,last:0};pm.set(k,r);}
+    r.name=o.name;r.pid=o.pid||r.pid;r.ward=o.ward||r.ward;r[o.kind==='外泊'?'stay':'out']++;const m=lateMin(o);if(m>0){r.late++;r.maxLate=Math.max(r.maxLate,m);}
+    if(hadSearch(o))r.search++;r.last=Math.max(r.last,o.departAt);}
+  const people=[...pm.values()].map(r=>({...r,lastTxt:fmt(r.last)})).sort((a,b)=>(b.out+b.stay)-(a.out+a.stay)||b.last-a.last);
+  return {L,total,people,nPeople:people.length,
+    avgOut:ret.length?ret.reduce((a,o)=>a+(o.returnedAt-o.departAt),0)/ret.length:null,nRet:ret.length,
+    lateAvg:late.length?Math.round(late.reduce((a,b)=>a+b,0)/late.length):0,lateMax:late.length?Math.max(...late):0,
+    wd:[0,1,2,3,4,5,6].map(d=>L.filter(o=>new Date(o.departAt).getDay()===d).length),
+    tb:ST_TB.map(([l,a,b])=>({label:l,n:L.filter(o=>{const h=new Date(o.departAt).getHours();return h>=a&&h<b;}).length})),
+    dests:Object.entries(dm).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'ja')).slice(0,5),
+    alone:L.filter(o=>o.alone).length,comp:L.filter(o=>!o.alone).length,
+    byWard:WARDS.map(w=>statRow(w,all.filter(o=>o.ward===w))),allTotal:statRow('合計',all),
+    byAdm:['任意入院','医療保護入院','その他'].map(a=>statRow(a,L.filter(o=>o.adm===a)))};
+}
+const avgTxt=d=>d.avgOut===null?'—':dur(d.avgOut);
+const stTbl=rows=>'<thead><tr>'+ST_COLS.map(c=>`<th${c[1]==='label'?'':' class="num"'}>${c[0]}</th>`).join('')+'</tr></thead><tbody>'+rows.map(r=>`<tr${r.label==='合計'?' class="tot"':''}>`+ST_COLS.map(c=>`<td class="${c[1]==='label'?'lb':'num'}">${esc(r[c[1]])}</td>`).join('')+'</tr>').join('')+'</tbody>';
 function renderStats(){if(stY===null){const n=new Date();stY=n.getFullYear();stM=n.getMonth();}
-  $('#stTitle').textContent=`${stY}年${stM+1}月の集計`;const d=statsData();
-  $('#stTable').innerHTML=stTbl([...d.byWard,d.total]);$('#stTable2').innerHTML=stTbl([...d.byAdm,d.total]);}
+  $('#stTitle').textContent=`${stY}年${stM+1}月の集計（${stWardLabel()}）`;
+  $('#stWard').innerHTML=['',...WARDS].map(w=>`<button type="button" class="btn${w===stWard?' on':''}" data-stw="${w}">${w||'全病棟'}</button>`).join('');
+  const d=statsData(),t=d.total;
+  const card=(k,label,v,unit,sub)=>`<div class="stcard" data-k="${k}"><div class="k">${label}</div><div class="v">${v}<small>${unit}</small></div>${sub?`<div class="s">${sub}</div>`:''}</div>`;
+  $('#stCards').innerHTML=card('n','外出・外泊',t.n,'件',`外出 ${t.out}・外泊 ${t.stay}`)+card('people','出た人数',d.nPeople,'人','実人数')
+    +card('late','遅れ',t.late,'件',`割合 ${t.rate}%`)+card('search','捜索',t.search,'件','')+card('tag','タグを渡した',t.tag,'件','');
+  $('#stTime').innerHTML=`<dl class="info" style="min-width:0"><dt>外出の平均時間</dt><dd data-k="avgOut">${avgTxt(d)}</dd>
+    <dt>遅れの平均</dt><dd data-k="lateAvg">${d.lateAvg}分</dd><dt>遅れの最大</dt><dd data-k="lateMax">${d.lateMax}分</dd></dl><p class="hint">外出の平均時間は、帰院済みの外出 ${d.nRet}件から出しています（外泊は含めません）。</p>`;
+  $('#stAlone').innerHTML=`<thead><tr><th>単独</th><th>同行</th></tr></thead><tbody><tr><td class="num" data-k="alone">${d.alone}件</td><td class="num" data-k="comp">${d.comp}件</td></tr></tbody>`;
+  $('#stDest').innerHTML='<thead><tr><th>行き先</th><th class="num">件数</th></tr></thead><tbody>'+(d.dests.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join('')||'<tr><td colspan="2">記録がありません</td></tr>')+'</tbody>';
+  $('#stWd').innerHTML='<thead><tr>'+WD.split('').map(w=>`<th class="num">${w}</th>`).join('')+'</tr></thead><tbody><tr>'+d.wd.map(n=>`<td class="num">${n}</td>`).join('')+'</tr></tbody>';
+  $('#stTb').innerHTML='<thead><tr>'+d.tb.map(x=>`<th class="num">${x.label}</th>`).join('')+'</tr></thead><tbody><tr>'+d.tb.map(x=>`<td class="num">${x.n}</td>`).join('')+'</tr></tbody>';
+  $('#stPt').innerHTML='<thead><tr>'+ST_PT.map(([h,k],i)=>`<th class="${i===0?'nm0':['out','stay','late','maxLate','search'].includes(k)?'num':''}">${h}</th>`).join('')+'</tr></thead><tbody>'+
+    (d.people.map(r=>'<tr>'+ST_PT.map(([,k],i)=>i===0?`<td class="nm0"><a class="ptlink" data-stpt="${esc(r.key)}">${esc(r.name)}</a></td>`:`<td class="${['out','stay','late','maxLate','search'].includes(k)?'num':''}">${esc(r[k])}</td>`).join('')+'</tr>').join('')
+     ||`<tr><td class="nm0" colspan="${ST_PT.length}">この月の外出・外泊はありません</td></tr>`)+'</tbody>';
+  $('#stWardBox').hidden=!!stWard;$('#stTable').innerHTML=stTbl([...d.byWard,d.allTotal]);$('#stTable2').innerHTML=stTbl([...d.byAdm,d.total]);}
+$('#stWard').addEventListener('click',e=>{const b=e.target.closest('[data-stw]');if(!b)return;stWard=b.dataset.stw;renderStats();});
+$('#stPt').addEventListener('click',e=>{const a=e.target.closest('[data-stpt]');if(!a)return;const k=a.dataset.stpt;
+  const o=outings.find(x=>ptKey(x)===k);if(!o)return;
+  const p=patients.find(x=>x.id===o.patientId)||(o.pid?patients.find(x=>x.pid===o.pid):null)||{id:o.patientId||'',name:o.name,pid:o.pid};
+  dlgPatientHistory(p);});
 $('#stPrev').addEventListener('click',()=>{stM--;if(stM<0){stM=11;stY--;}renderStats();});
 $('#stNext').addEventListener('click',()=>{stM++;if(stM>11){stM=0;stY++;}renderStats();});
 $('#stNow').addEventListener('click',()=>{stY=null;renderStats();});
-$('#stCsv').addEventListener('click',()=>{const d=statsData();const head=ST_COLS.map(c=>c[0]);
-  const rows=[[`${stY}年${stM+1}月 病棟別`],head,...[...d.byWard,d.total].map(r=>ST_COLS.map(c=>r[c[1]])),[],[`${stY}年${stM+1}月 入院形態別`],head,...[...d.byAdm,d.total].map(r=>ST_COLS.map(c=>r[c[1]]))];
-  const csv='﻿'+rows.map(r=>r.map(v=>{v=String(v??'');return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',')).join('\r\n');
-  download(`外出外泊集計_${stY}-${pad(stM+1)}.csv`,new Blob([csv],{type:'text/csv'}));});
-$('#stPrint').addEventListener('click',()=>{const d=statsData();
-  const t=rows=>`<table><thead><tr>${ST_COLS.map(c=>`<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${ST_COLS.map(c=>`<td${r.label==='合計'||c[1]==='label'?' class="em"':''}>${esc(r[c[1]])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-  $('#printArea').innerHTML=`<h1>外出・外泊 月別集計　${stY}年${stM+1}月</h1><div class="pmeta"><span>出発日がこの月の外出・外泊（予定・誤登録の取消は除く）。遅れ＝当初の帰院予定より遅れたもの。</span><span>印刷：${esc(fmtFull(Date.now()))}</span></div>
-    <p style="font-size:10pt;font-weight:700;margin:3mm 0 1mm">病棟別</p>${t([...d.byWard,d.total])}<p style="font-size:10pt;font-weight:700;margin:5mm 0 1mm">入院形態別</p>${t([...d.byAdm,d.total])}`;
+const csvLine=r=>r.map(v=>{v=String(v??'');return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',');
+$('#stCsv').addEventListener('click',()=>{const d=statsData(),t=d.total,head=ST_COLS.map(c=>c[0]);
+  const rows=[[`${stY}年${stM+1}月の集計（${stWardLabel()}）`],['出発日がその月の外出・外泊（予定・誤登録の取消は除く）。遅れ＝当初の帰院予定より遅れたもの。'],[],
+    ['まとめ'],['外出（件）',t.out],['外泊（件）',t.stay],['合計（件）',t.n],['出た人数（実人数）',d.nPeople],['遅れ（件）',t.late],['遅れの割合(%)',t.rate],['捜索（件）',t.search],['タグを渡した（件）',t.tag],[],
+    ['時間'],['外出の平均時間（分）',d.avgOut===null?'':Math.round(d.avgOut/60000)],['平均の対象（帰院済みの外出・件）',d.nRet],['遅れの平均（分）',d.lateAvg],['遅れの最大（分）',d.lateMax],[],
+    ['曜日別の出発件数'],WD.split(''),d.wd,[],
+    ['時間帯別の出発件数'],d.tb.map(x=>x.label),d.tb.map(x=>x.n),[],
+    ['行き先の上位5'],['行き先','件数'],...d.dests,[],
+    ['単独・同行'],['単独','同行'],[d.alone,d.comp],[],
+    ['患者別'],ST_PT.map(c=>c[0]),...d.people.map(r=>ST_PT.map(([,k])=>k==='lastTxt'?fmtFull(r.last):r[k])),[],
+    ...(stWard?[]:[['病棟別'],head,...[...d.byWard,d.allTotal].map(r=>ST_COLS.map(c=>r[c[1]])),[]]),
+    ['入院形態別'],head,...[...d.byAdm,d.total].map(r=>ST_COLS.map(c=>r[c[1]]))];
+  download(`外出外泊集計_${stY}-${pad(stM+1)}${stWard?'_'+stWard:''}.csv`,new Blob(['﻿'+rows.map(csvLine).join('\r\n')],{type:'text/csv'}));});
+$('#stPrint').addEventListener('click',()=>{const d=statsData(),t=d.total;
+  const tb=(head,rows,numFrom=1)=>`<table><thead><tr>${head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((v,i)=>`<td${i<numFrom?' class="em"':''}>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const st=rows=>tb(ST_COLS.map(c=>c[0]),rows.map(r=>ST_COLS.map(c=>r[c[1]])));
+  const h=x=>`<p style="font-size:10pt;font-weight:700;margin:3mm 0 1mm">${x}</p>`;
+  $('#printArea').innerHTML=`<h1>外出・外泊 月別集計　${stY}年${stM+1}月　${esc(stWardLabel())}</h1><div class="pmeta"><span>出発日がこの月の外出・外泊（予定・誤登録の取消は除く）。遅れ＝当初の帰院予定より遅れたもの。</span><span>印刷：${esc(fmtFull(Date.now()))}</span></div>
+    ${h('まとめ')}${tb(['外出','外泊','合計','出た人数（実人数）','遅れ','遅れの割合(%)','捜索','タグを渡した','外出の平均時間','遅れの平均(分)','遅れの最大(分)'],[[t.out,t.stay,t.n,d.nPeople,t.late,t.rate,t.search,t.tag,avgTxt(d)+'（帰院済み'+d.nRet+'件）',d.lateAvg,d.lateMax]],0)}
+    <div style="display:flex;gap:4mm;align-items:flex-start"><div style="flex:1">${h('曜日別の出発件数')}${tb(WD.split(''),[d.wd],0)}</div><div style="flex:1">${h('時間帯別の出発件数')}${tb(d.tb.map(x=>x.label),[d.tb.map(x=>x.n)],0)}</div><div style="flex:.6">${h('単独・同行')}${tb(['単独','同行'],[[d.alone,d.comp]],0)}</div></div>
+    ${h('行き先の上位5')}${tb(['行き先','件数'],d.dests.length?d.dests:[['記録がありません','']])}
+    ${h('患者別（回数の多い順）')}${tb(ST_PT.map(c=>c[0]),d.people.map(r=>ST_PT.map(([,k])=>r[k])))}
+    ${stWard?'':h('病棟別')+st([...d.byWard,d.allTotal])}${h('入院形態別')}${st([...d.byAdm,d.total])}`;
   document.body.classList.add('pm-history');const done=()=>{document.body.classList.remove('pm-history');window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);
   try{window.print();}catch(e){done();toast('この画面からは印刷できません。ファイルをSafariやChromeで直接開いて印刷してください。',6000);}});
 
@@ -1787,7 +1873,7 @@ $('#bannerAck').addEventListener('click',async()=>{const now=Date.now();for(cons
 $('#soundBtn').addEventListener('click',()=>{ensureAudio();setTimeout(()=>{if(soundReady())toast('アラーム音が鳴る状態です');},200);});
 
 /* ---------- iPad単独動作（オフライン対応） ---------- */
-const APP_VERSION='1.11.0';
+const APP_VERSION='1.12.0';
 {const av=document.getElementById('aboutVer');if(av)av.textContent=APP_VERSION;}
 function updateSwInfo(){const el=$('#swInfo');if(!el)return;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
